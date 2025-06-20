@@ -2,42 +2,72 @@ package main
 
 import (
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"gopkg.in/natefinch/lumberjack.v2"
 	"os"
+	"path/filepath"
+	"strconv"
+	"time"
 )
 
-// SetLogger sets a new global logger instance.
-func SetLogger() error {
-	// Declaring logger
-	var logger *zap.Logger
-	var err error
+// GetLogger gets a new configured multiplexed logger instance.
+// Default config: production
+func GetLogger() *zap.Logger {
+	ts := strconv.FormatInt(time.Now().Unix(), 10) // timestamp
 
-	// Defining logger based on the running environment
-	switch os.Getenv("ENV") {
-	case "dev":
-		logger, err = zap.NewDevelopment()
-	case "tst":
-		logger, err = zap.NewDevelopment()
-	case "prd":
-	default:
-		logger, err = zap.NewProduction()
+	// Logging outputs
+	consoleWriter := zapcore.Lock(os.Stdout)
+	fileWriter := zapcore.AddSync(&lumberjack.Logger{
+		Filename:   filepath.Join("logs", ts+".json"),
+		MaxSize:    20, // megabytes
+		MaxBackups: 3,
+		MaxAge:     7, // days
+	})
+
+	// Encoders
+	var consoleConfig, fileConfig zapcore.EncoderConfig
+	var level zapcore.Level
+
+	if os.Getenv("ENV") == "development" {
+		level = zapcore.DebugLevel
+		consoleConfig = zap.NewDevelopmentEncoderConfig()
+		fileConfig = zap.NewDevelopmentEncoderConfig()
+	} else if os.Getenv("ENV") == "test" {
+		level = zapcore.ErrorLevel
+		consoleConfig = zap.NewDevelopmentEncoderConfig()
+		fileConfig = zap.NewDevelopmentEncoderConfig()
+	} else {
+		level = zapcore.InfoLevel
+		consoleConfig = zap.NewProductionEncoderConfig()
+		fileConfig = zap.NewProductionEncoderConfig()
 	}
 
-	// Panic on error
-	if err != nil {
-		return err
-	}
+	consoleConfig.TimeKey = "timestamp"
+	fileConfig.TimeKey = "timestamp"
 
-	// Flush buffer
+	consoleConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	fileConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+
+	consoleConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
+
+	consoleEncoder := zapcore.NewConsoleEncoder(consoleConfig)
+	fileEncoder := zapcore.NewJSONEncoder(fileConfig)
+
+	// Multiplexed core
+	core := zapcore.NewTee(
+		zapcore.NewCore(consoleEncoder, consoleWriter, level),
+		zapcore.NewCore(fileEncoder, fileWriter, level),
+	)
+	logger := zap.New(core, zap.AddCaller(), zap.AddCallerSkip(1))
+
+	// Flush buffer and return
 	defer func() {
-		err = logger.Sync()
+		err := logger.Sync()
 		if err != nil {
-			logger.Warn("Could not flush log entries.",
+			logger.Warn("Could not flush log entries",
 				zap.Error(err),
 			)
 		}
 	}()
-
-	// Set to global
-	zap.ReplaceGlobals(logger)
-	return nil
+	return logger
 }

@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"github.com/joho/godotenv"
 	"isis_account/internal/router"
 	"net/http"
 	"os"
@@ -29,29 +28,23 @@ func Serve(port int, r *mux.Router) {
 func init() {
 	fmt.Printf("%s %g started\n", App, Version)
 
+	// Setup global logger
+	logger := GetLogger()
+	zap.ReplaceGlobals(logger)
+
 	// Load .env
-	err := godotenv.Load()
-	if err != nil {
-		panic("Could not load .env file: " + err.Error())
-	}
 	env := os.Getenv("ENV")
-	if env == "tst" || env == "dev" {
-		err = os.Setenv("ENV", "prd")
+	if env == "test" || env == "development" {
+		err := os.Setenv("ENV", "production")
 		if err != nil {
-			panic("Could not default ENV to prd: " + err.Error())
+			zap.L().Fatal("Could not default ENV to prd", zap.Error(err))
 		}
 	}
 
 	// Create the log's directory
-	err = os.MkdirAll("logs", os.ModeDir)
+	err := os.MkdirAll("logs", os.ModeDir)
 	if err != nil {
-		panic("Could not create log directory: " + err.Error())
-	}
-
-	// Setup global logger
-	err = SetLogger()
-	if err != nil {
-		panic("Could not start logging system: " + err.Error())
+		zap.L().Fatal("Could not create log directory", zap.Error(err))
 	}
 }
 
