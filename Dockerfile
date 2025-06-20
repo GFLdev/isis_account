@@ -11,12 +11,11 @@ FROM golang:1.24-alpine AS build-stage
 WORKDIR /app
 
 # Modules and dependencies
-COPY go.mod ./
-RUN go mod tidy
+COPY go.mod go.sum ./
 RUN go mod download
 
 # Copy source code
-COPY *.go ./
+COPY . .
 
 # Compile
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /isis_account
@@ -34,7 +33,7 @@ RUN go test -v ./...
 ######################
 
 # Deploy to lean image
-FROM scratch AS deploy-stage
+FROM test-stage AS deploy-stage
 WORKDIR /
 
 # Copy binary from build stage
@@ -44,5 +43,5 @@ COPY --from=build-stage /isis_account /isis_account
 ARG PORT
 EXPOSE $PORT
 
-# Deployt
+# Deploy
 ENTRYPOINT ["/isis_account"]
