@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"isis_account/internal/db"
 	"isis_account/internal/router"
 	"net/http"
 	"os"
@@ -21,7 +22,9 @@ func Serve(port int, r *mux.Router) {
 	zap.L().Info("Serving on port " + strconv.Itoa(port))
 	err := http.ListenAndServe(":"+strconv.Itoa(port), r)
 	if err != nil {
-		zap.L().Error("Server stopped")
+		zap.L().Error("Server stopped",
+			zap.Error(err),
+		)
 	}
 }
 
@@ -37,14 +40,18 @@ func init() {
 	if env == "test" || env == "development" {
 		err := os.Setenv("ENV", "production")
 		if err != nil {
-			zap.L().Fatal("Could not default ENV to prd", zap.Error(err))
+			zap.L().Fatal("Could not default ENV to production",
+				zap.Error(err),
+			)
 		}
 	}
 
 	// Create the log's directory
 	err := os.MkdirAll("logs", os.ModeDir)
 	if err != nil {
-		zap.L().Fatal("Could not create log directory", zap.Error(err))
+		zap.L().Fatal("Could not create log directory",
+			zap.Error(err),
+		)
 	}
 }
 
@@ -52,7 +59,16 @@ func main() {
 	// New router
 	r := router.NewRouter()
 
-	// Start server
-	port := 8080
+	// Connect to database
+	_ = db.GetInstance()
+
+	// Parse server port and serve
+	port, err := strconv.Atoi(os.Getenv("PORT"))
+	if err != nil {
+		zap.L().Warn("Could not parse server port, defaulting to 8080",
+			zap.Error(err),
+		)
+		port = 8080
+	}
 	Serve(port, r)
 }
