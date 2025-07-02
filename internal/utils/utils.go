@@ -22,13 +22,13 @@ func CloseFiles(files ...*os.File) {
 }
 
 // ValidateStruct validates a struct. Return nil if it passes.
-func ValidateStruct[T any](val T) error {
+func ValidateStruct(val interface{}) error {
 	validate := validator.New() // new validator instance
 	return validate.Struct(val) // validate and return its result
 }
 
 // ParseHTTPBody parses body slice to a T struct.
-func ParseHTTPBody[T any](body *io.Reader) (T, error) {
+func ParseHTTPBody[T any](body *io.ReadCloser) (T, error) {
 	// Unmarshalling to JSON
 	var val T
 	decoder := json.NewDecoder(*body)

@@ -1,14 +1,14 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"isis_account/internal/db"
 	"isis_account/internal/router"
-	"net/http"
 	"os"
 	"strconv"
+	"time"
 
-	"github.com/gorilla/mux"
 	"go.uber.org/zap"
 )
 
@@ -16,17 +16,6 @@ const (
 	App     = "ISIS Account"
 	Version = 0.1
 )
-
-// Serve create a new HTTP server and listen.
-func Serve(port int, r *mux.Router) {
-	zap.L().Info("Serving on port " + strconv.Itoa(port))
-	err := http.ListenAndServe(":"+strconv.Itoa(port), r)
-	if err != nil {
-		zap.L().Error("Server stopped",
-			zap.Error(err),
-		)
-	}
-}
 
 func init() {
 	fmt.Printf("%s %g started\n", App, Version)
@@ -56,11 +45,31 @@ func init() {
 }
 
 func main() {
+	// Poll to connect to database
+	var dbInstance *sql.DB
+	var err error
+	for {
+		dbInstance, err = db.GetInstance()
+		if err == nil {
+			zap.L().Info("Database is responding correctly")
+			break
+		}
+		zap.L().Warn("Database not responding",
+			zap.Error(err),
+		)
+		time.Sleep(5 * time.Second) // 5 seconds retry
+	}
+	defer func() {
+		err := dbInstance.Close() // close database connection
+		if err != nil {
+			zap.L().Error("Could not close database connection",
+				zap.Error(err),
+			)
+		}
+	}()
+
 	// New router
 	r := router.NewRouter()
-
-	// Connect to database
-	_ = db.GetInstance()
 
 	// Parse server port and serve
 	port, err := strconv.Atoi(os.Getenv("PORT"))
@@ -70,5 +79,6 @@ func main() {
 		)
 		port = 8080
 	}
-	Serve(port, r)
+	zap.L().Info("Serving on port " + strconv.Itoa(port))
+	r.Logger.Fatal(r.Start(":" + strconv.Itoa(port)))
 }

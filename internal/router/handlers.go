@@ -4,36 +4,78 @@ import (
 	"isis_account/internal/utils"
 	"net/http"
 
-	"go.uber.org/zap"
+	"github.com/labstack/echo/v4"
+	"golang.org/x/crypto/bcrypt"
 )
 
+// BcryptCost is the total iterations for bcrypt's algorithm.
+const BcryptCost = 5
+
 // AuthLoginHandler handles login via username and password.
-func AuthLoginHandler(w http.ResponseWriter, r *http.Request) {
+func AuthLoginHandler(c echo.Context) error {
+	// Headers
+	c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+
 	// Read and parse body
-	body, err := utils.ParseHTTPBody[AuthLogin](nil) // TODO: r.Body to io.Reader
+	body, err := utils.ParseHTTPBody[AuthLogin](&c.Request().Body)
 	if err != nil {
-		zap.L().Error(string(CannotReadBodyError),
-			zap.Error(err),
+		c.JSON(
+			http.StatusInternalServerError,
+			MessageResponse{Message: string(ParsingError)},
 		)
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(CannotReadBodyError))
-		return
+		return err
 	}
 
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(body.Username))
+	// Validate body
+	err = utils.ValidateStruct(body)
+	if err != nil {
+		c.JSON(
+			http.StatusBadRequest,
+			MessageResponse{Message: string(InvalidAuthForm)},
+		)
+		return err
+	}
+
+	// Get password hash from database
+	hash := []byte("") // TODO: Get hash from database
+
+	// Compare
+	err = bcrypt.CompareHashAndPassword(hash, []byte(body.Password))
+	if err != nil {
+		c.JSON(
+			http.StatusBadRequest,
+			MessageResponse{Message: string(IncorrectCredentials)},
+		)
+		return err
+	}
+
+	// Response
+	return c.JSON(
+		http.StatusOK,
+		MessageResponse{Message: body.Username},
+	)
 }
 
 // AuthRefreshHandler handles session via access and/or refresh token.
-func AuthRefreshHandler(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	println("POST /auth/refresh reached")
-	w.Write([]byte("/auth/refresh reached"))
+func AuthRefreshHandler(c echo.Context) error {
+	// Headers
+	c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+
+	// Response
+	return c.JSON(
+		http.StatusOK,
+		MessageResponse{Message: "/auth/refresh reached"},
+	)
 }
 
 // AuthLogoutHandler handles session logout.
-func AuthLogoutHandler(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	println("POST /auth/logout reached")
-	w.Write([]byte("/auth/logout reached"))
+func AuthLogoutHandler(c echo.Context) error {
+	// Headers
+	c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+
+	// Response
+	return c.JSON(
+		http.StatusOK,
+		MessageResponse{Message: "/auth/logout reached"},
+	)
 }
