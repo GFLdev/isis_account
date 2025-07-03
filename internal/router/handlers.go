@@ -5,13 +5,14 @@ import (
 	"isis_account/internal/types"
 	"isis_account/internal/utils"
 	"net/http"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"golang.org/x/crypto/bcrypt"
 )
 
 // BcryptCost is the total iterations for bcrypt's algorithm.
-const BcryptCost = 5
+const BcryptCost = 12
 
 // AuthLoginHandler handles login via username and password.
 func AuthLoginHandler(c echo.Context) error {
@@ -19,7 +20,7 @@ func AuthLoginHandler(c echo.Context) error {
 	c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 
 	// Read and parse body
-	body, err := utils.ParseHTTPBody[types.HTTPAuthLogin](&c.Request().Body)
+	body, err := utils.ParseHTTPBody[types.HTTPAuthLoginReq](&c.Request().Body)
 	if err != nil {
 		c.JSON(
 			http.StatusInternalServerError,
@@ -63,11 +64,42 @@ func AuthLoginHandler(c echo.Context) error {
 		return err
 	}
 
+	// Generate access token
+	// TODO: Configurable JWT expire duration
+	// TODO: Configurable token sign key
+	duration := time.Duration(30) * time.Minute
+	expiresAt := time.Now().Add(duration)
+	claims := GenerateClaims(acc.AccountID, acc.RoleID, acc.Username, expiresAt)
+	accessToken, err := GenerateToken(claims, []byte("secret"))
+	if err != nil {
+		c.JSON(
+			http.StatusInternalServerError,
+			types.HTTPMessageResponse{Message: string(types.ParsingError)},
+		)
+		return err
+	}
+
 	// Response
-	return c.JSON(
-		http.StatusOK,
-		types.HTTPMessageResponse{Message: body.Username},
-	)
+	res := types.HTTPAuthLoginRes{
+		AccountID: acc.AccountID,
+		RoleId:    acc.RoleID,
+	}
+	err = utils.ValidateStruct(res)
+	if err != nil {
+		c.JSON(
+			http.StatusInternalServerError,
+			types.HTTPMessageResponse{Message: string(types.ParsingError)},
+		)
+		return err
+	}
+
+	// Set cookie and return
+	c.SetCookie(&http.Cookie{
+		Name:    "access_token",
+		Value:   accessToken,
+		Expires: expiresAt,
+	})
+	return c.JSON(http.StatusOK, res)
 }
 
 // AuthRefreshHandler handles session via access and/or refresh token.
