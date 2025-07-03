@@ -10,7 +10,8 @@ import (
 
 func configMiddlewares(e *echo.Echo) *echo.Echo {
 	// Redirect to HTTPS
-	e.Pre(middleware.HTTPSRedirect())
+	// FIXME: Commented for testing purposes
+	// e.Pre(middleware.HTTPSRedirect())
 
 	// CORS config
 	corsConfig := middleware.CORSConfig{
@@ -73,18 +74,18 @@ func NewRouter() *echo.Echo {
 	auth.POST("/logout", AuthLogoutHandler)
 
 	acc.GET("/", func(c echo.Context) error { return nil })
-	acc.GET("/{id}", func(c echo.Context) error { return nil })
+	acc.GET("/:id", func(c echo.Context) error { return nil })
 	acc.POST("/", func(c echo.Context) error { return nil })
-	acc.PATCH("/{id}", func(c echo.Context) error { return nil })
+	acc.PATCH("/:id", func(c echo.Context) error { return nil })
 	acc.DELETE("/", func(c echo.Context) error { return nil })
-	acc.DELETE("/{id}", func(c echo.Context) error { return nil })
+	acc.DELETE("/:id", func(c echo.Context) error { return nil })
 
 	role.GET("/", func(c echo.Context) error { return nil })
-	role.GET("/{id}", func(c echo.Context) error { return nil })
+	role.GET("/:id", func(c echo.Context) error { return nil })
 	role.POST("/", func(c echo.Context) error { return nil })
-	role.PATCH("/{id}", func(c echo.Context) error { return nil })
+	role.PATCH("/:id", func(c echo.Context) error { return nil })
 	role.DELETE("/", func(c echo.Context) error { return nil })
-	role.DELETE("/{id}", func(c echo.Context) error { return nil })
+	role.DELETE("/:id", func(c echo.Context) error { return nil })
 
 	log.GET("/", func(c echo.Context) error { return nil })
 	log.GET("/login", func(c echo.Context) error { return nil })
