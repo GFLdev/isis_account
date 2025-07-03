@@ -1,10 +1,10 @@
-package router
+package types
 
-type MessageResponse struct {
+type HTTPMessageResponse struct {
 	Message string `json:"message"`
 }
 
-type AuthLogin struct {
+type HTTPAuthLogin struct {
 	Username string `json:"username" validate:"required,min=4,max=30"`
 	Password string `json:"password" validate:"required,min=4,max=16"`
 }

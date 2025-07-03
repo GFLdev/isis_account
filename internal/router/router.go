@@ -1,13 +1,79 @@
 package router
 
 import (
+	"encoding/json"
+	"isis_account/internal/utils"
 	"net/http"
+	"os"
 
+	echojwt "github.com/labstack/echo-jwt/v4"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
 
+// httpErrorHandlerWithLogs handles the errors, returned from the routes'
+// handlers, and logs them.
+func httpErrorHandlerWithLogs(err error, c echo.Context) {
+	// Log error with HTTP information, if it is a Internal Server Error
+	if c.Response().Status == http.StatusInternalServerError {
+		utils.LogWithHTTPInfo(
+			c,
+			zap.L().Error,
+			"HTTP request-response error",
+			zap.Int("status", c.Response().Status),
+			zap.Error(err),
+		)
+	}
+}
+
+// logHTTPInfo logs each request-response, filtering sensible data in the bodies.
+func logHTTPInfo(c echo.Context, reqBody, resBody []byte) {
+	// Filter sensible data to not show in logs
+	filtered := make([][]byte, 2)
+	bodies := [][]byte{reqBody, resBody}
+	for j, body := range bodies {
+		// Parse each body
+		var i interface{}
+		err := json.Unmarshal(body, &i)
+		if err != nil {
+			filtered[j] = []byte("")
+			continue
+		}
+
+		// Filter sensible fields
+		m, ok := i.(map[string]interface{})
+		if ok {
+			sensibleFields := []string{"password"}
+			for _, field := range sensibleFields {
+				delete(m, field)
+			}
+		} else {
+			filtered[j] = []byte("")
+			continue
+		}
+
+		payload, err := json.Marshal(i)
+		if err == nil {
+			filtered[j] = payload
+		} else {
+			filtered[j] = []byte("")
+		}
+	}
+
+	// Log with HTTP information
+	utils.LogWithHTTPInfo(
+		c,
+		zap.L().Info,
+		"HTTP request-response",
+		zap.Int("status", c.Response().Status),
+		zap.String("request_body", string(filtered[0])),
+		zap.String("response_body", string(filtered[1])),
+	)
+}
+
+// configMiddlewares configure the middlewares for the echo router.
 func configMiddlewares(e *echo.Echo) *echo.Echo {
 	// Redirect to HTTPS
 	// FIXME: Commented for testing purposes
@@ -35,6 +101,9 @@ func configMiddlewares(e *echo.Echo) *echo.Echo {
 
 	// Implement middlewares
 	e.Use(
+		middleware.BodyDump(func(c echo.Context, reqBody, resBody []byte) {
+			logHTTPInfo(c, reqBody, resBody) // log HTTP req/res info
+		}), // dump request/response bodies, for pre/post-processing
 		middleware.Decompress(), // decompress request with gzip
 		middleware.GzipWithConfig(
 			middleware.GzipConfig{Level: 5},
@@ -60,13 +129,32 @@ func configMiddlewares(e *echo.Echo) *echo.Echo {
 func NewRouter() *echo.Echo {
 	// New echo router with middlewares
 	e := echo.New()
+	e.HideBanner = true                           // hide start banner
+	e.HidePort = true                             // hide started port
+	e.IPExtractor = echo.ExtractIPFromXFFHeader() // extract IP
+	e.HTTPErrorHandler = httpErrorHandlerWithLogs // HTTP error with logging
 	configMiddlewares(e)
 
 	// Defining subroutes
 	auth := e.Group("/auth")
-	acc := e.Group("/account")
-	role := e.Group("/role")
-	log := e.Group("/log")
+
+	restricted := e.Group("/")
+	acc := restricted.Group("/account")
+	role := restricted.Group("/role")
+	log := restricted.Group("/log")
+
+	// JWT
+	jwtSecret := os.Getenv("JWT_SECRET") // TODO: Create config struct
+	if jwtSecret == "" {
+		zap.L().Warn("JWT secret not defined, defaulting to \"secret\"")
+		jwtSecret = "secret"
+	}
+	jwtConfig := echojwt.Config{
+		NewClaimsFunc: NewClaims,
+		SigningKey:    []byte(jwtSecret),
+		SigningMethod: "HS256", // HMAC with SHA-256
+	}
+	restricted.Use(echojwt.WithConfig(jwtConfig))
 
 	// Defining routes
 	auth.POST("/login", AuthLoginHandler)

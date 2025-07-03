@@ -3,8 +3,9 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	"isis_account/internal/db"
+	"isis_account/internal/database"
 	"isis_account/internal/router"
+	"isis_account/internal/types"
 	"os"
 	"strconv"
 	"time"
@@ -18,7 +19,14 @@ const (
 )
 
 func init() {
-	fmt.Printf("%s %g started\n", App, Version)
+	// Banner
+	fmt.Printf("\n%s%s %s%g%s\n\n",
+		string(types.BoldBlue),
+		App,
+		string(types.BoldWhite),
+		Version,
+		string(types.Reset),
+	)
 
 	// Setup global logger
 	logger := GetLogger()
@@ -46,10 +54,10 @@ func init() {
 
 func main() {
 	// Poll to connect to database
-	var dbInstance *sql.DB
+	var db *sql.DB
 	var err error
 	for {
-		dbInstance, err = db.GetInstance()
+		db, err = database.GetInstance()
 		if err == nil {
 			zap.L().Info("Database is responding correctly")
 			break
@@ -60,7 +68,7 @@ func main() {
 		time.Sleep(5 * time.Second) // 5 seconds retry
 	}
 	defer func() {
-		err := dbInstance.Close() // close database connection
+		err := db.Close() // close database connection
 		if err != nil {
 			zap.L().Error("Could not close database connection",
 				zap.Error(err),

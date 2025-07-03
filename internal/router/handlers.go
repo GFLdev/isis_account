@@ -1,6 +1,8 @@
 package router
 
 import (
+	"isis_account/internal/router/queries"
+	"isis_account/internal/types"
 	"isis_account/internal/utils"
 	"net/http"
 
@@ -17,11 +19,11 @@ func AuthLoginHandler(c echo.Context) error {
 	c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 
 	// Read and parse body
-	body, err := utils.ParseHTTPBody[AuthLogin](&c.Request().Body)
+	body, err := utils.ParseHTTPBody[types.HTTPAuthLogin](&c.Request().Body)
 	if err != nil {
 		c.JSON(
 			http.StatusInternalServerError,
-			MessageResponse{Message: string(ParsingError)},
+			types.HTTPMessageResponse{Message: string(types.ParsingError)},
 		)
 		return err
 	}
@@ -31,20 +33,32 @@ func AuthLoginHandler(c echo.Context) error {
 	if err != nil {
 		c.JSON(
 			http.StatusBadRequest,
-			MessageResponse{Message: string(InvalidAuthForm)},
+			types.HTTPMessageResponse{Message: string(types.InvalidAuthForm)},
 		)
 		return err
 	}
 
 	// Get password hash from database
-	hash := []byte("") // TODO: Get hash from database
+	acc, err := queries.GetAccountByUsername(body.Username)
+	if err != nil {
+		c.JSON(
+			http.StatusInternalServerError,
+			types.HTTPMessageResponse{Message: string(types.InternalError)},
+		)
+		return err
+	} else if acc == nil {
+		return c.JSON(
+			http.StatusNotFound,
+			types.HTTPMessageResponse{Message: string(types.AccountNotFound)},
+		)
+	}
 
 	// Compare
-	err = bcrypt.CompareHashAndPassword(hash, []byte(body.Password))
+	err = bcrypt.CompareHashAndPassword(acc.Password, []byte(body.Password))
 	if err != nil {
 		c.JSON(
 			http.StatusBadRequest,
-			MessageResponse{Message: string(IncorrectCredentials)},
+			types.HTTPMessageResponse{Message: string(types.IncorrectCredentials)},
 		)
 		return err
 	}
@@ -52,7 +66,7 @@ func AuthLoginHandler(c echo.Context) error {
 	// Response
 	return c.JSON(
 		http.StatusOK,
-		MessageResponse{Message: body.Username},
+		types.HTTPMessageResponse{Message: body.Username},
 	)
 }
 
@@ -64,7 +78,7 @@ func AuthRefreshHandler(c echo.Context) error {
 	// Response
 	return c.JSON(
 		http.StatusOK,
-		MessageResponse{Message: "/auth/refresh reached"},
+		types.HTTPMessageResponse{Message: "/auth/refresh reached"},
 	)
 }
 
@@ -76,6 +90,6 @@ func AuthLogoutHandler(c echo.Context) error {
 	// Response
 	return c.JSON(
 		http.StatusOK,
-		MessageResponse{Message: "/auth/logout reached"},
+		types.HTTPMessageResponse{Message: "/auth/logout reached"},
 	)
 }

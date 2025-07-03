@@ -6,8 +6,29 @@ import (
 	"os"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/labstack/echo/v4"
 	"go.uber.org/zap"
 )
+
+// LogWithHTTPInfo is a wrapper to zap.L() to log with HTTP request/response
+// information.
+func LogWithHTTPInfo(
+	c echo.Context,
+	l func(string, ...zap.Field),
+	msg string,
+	fields ...zap.Field,
+) {
+	// Request/Response info and append fields
+	e2eFields := []zap.Field{
+		zap.String("method", c.Request().Method),
+		zap.String("path", c.Path()),
+		zap.String("client_ip", c.RealIP()),
+	}
+	allFields := append(e2eFields, fields...)
+
+	// Log
+	l(msg, allFields...)
+}
 
 // CloseFiles close files and warns if it couldn't. Used in defer.
 func CloseFiles(files ...*os.File) {
