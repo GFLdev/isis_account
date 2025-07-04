@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"isis_account/internal/utils"
-	"os"
 	"strconv"
 	"sync"
 
@@ -33,28 +32,27 @@ var (
 )
 
 func getCredentials() dbCredentials {
+	var err error
+
 	// Validate credentials
-	port, err := strconv.Atoi(os.Getenv("DB_PORT"))
+	cred := dbCredentials{}
+	cred.port, err = strconv.Atoi(utils.MustEnv("DB_PORT"))
 	if err != nil {
 		zap.L().Fatal("Could not parse DB_PORT",
 			zap.Error(err),
 		)
 	}
+	cred.host = utils.MustEnv("DB_HOST")
+	cred.user = utils.MustEnv("DB_USER")
+	cred.password = utils.MustEnv("DB_PASS")
+	cred.dbname = utils.MustEnv("DB_NAME")
 
-	cred := dbCredentials{
-		host:     os.Getenv("DB_HOST"),
-		port:     port,
-		user:     os.Getenv("DB_USER"),
-		password: os.Getenv("DB_PASS"),
-		dbname:   os.Getenv("DB_NAME"),
-	}
 	err = utils.ValidateStruct(cred)
 	if err != nil {
 		zap.L().Fatal("Invalid database credentials",
 			zap.Error(err),
 		)
 	}
-
 	return cred
 }
 

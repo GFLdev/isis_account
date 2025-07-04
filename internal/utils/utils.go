@@ -72,3 +72,13 @@ func Rollback(tx *sql.Tx) {
 		)
 	}
 }
+
+func MustEnv(envVar string) string {
+	val, ok := os.LookupEnv(envVar)
+	if !ok {
+		zap.L().Fatal("Environment variable not set",
+			zap.String("variable", envVar),
+		)
+	}
+	return val
+}
