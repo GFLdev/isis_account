@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"database/sql"
 	"encoding/json"
 	"io"
 	"os"
@@ -43,7 +44,7 @@ func CloseFiles(files ...*os.File) {
 }
 
 // ValidateStruct validates a struct. Return nil if it passes.
-func ValidateStruct(val interface{}) error {
+func ValidateStruct(val any) error {
 	validate := validator.New() // new validator instance
 	return validate.Struct(val) // validate and return its result
 }
@@ -59,4 +60,15 @@ func ParseHTTPBody[T any](body *io.ReadCloser) (T, error) {
 		return val, err
 	}
 	return val, nil
+}
+
+// Rollback is a transaction rollback wrapper function.
+func Rollback(tx *sql.Tx) {
+	err := tx.Rollback()
+	if err != nil && err != sql.ErrTxDone {
+		zap.L().Error(
+			"Could not rollback transaction",
+			zap.Error(err),
+		)
+	}
 }

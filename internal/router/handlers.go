@@ -67,14 +67,34 @@ func AuthLoginHandler(c echo.Context) error {
 	// Generate access token
 	// TODO: Configurable JWT expire duration
 	// TODO: Configurable token sign key
-	duration := time.Duration(30) * time.Minute
-	expiresAt := time.Now().Add(duration)
-	claims := GenerateClaims(acc.AccountID, acc.RoleID, acc.Username, expiresAt)
+	accessDuration := time.Duration(30) * time.Minute
+	accessExpiration := time.Now().Add(accessDuration)
+	claims := GenerateClaims(
+		acc.AccountID,
+		acc.RoleID,
+		acc.Username,
+		accessExpiration,
+	)
 	accessToken, err := GenerateToken(claims, []byte("secret"))
 	if err != nil {
 		c.JSON(
 			http.StatusInternalServerError,
 			types.HTTPMessageResponse{Message: string(types.ParsingError)},
+		)
+		return err
+	}
+
+	// Generate refresh token
+	refreshDuration := time.Duration(48) * time.Hour
+	refreshExpiration := time.Now().Add(refreshDuration)
+	refreshToken, err := queries.CreateRefreshToken(
+		acc.AccountID,
+		refreshExpiration,
+	)
+	if err != nil {
+		c.JSON(
+			http.StatusInternalServerError,
+			types.HTTPMessageResponse{Message: string(types.InternalError)},
 		)
 		return err
 	}
@@ -93,11 +113,22 @@ func AuthLoginHandler(c echo.Context) error {
 		return err
 	}
 
-	// Set cookie and return
+	// Set cookies and return
 	c.SetCookie(&http.Cookie{
-		Name:    "access_token",
-		Value:   accessToken,
-		Expires: expiresAt,
+		Name:     "refresh_token",
+		Value:    refreshToken.RefreshTokenID.String(),
+		Expires:  refreshExpiration,
+		Secure:   true,
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+	})
+	c.SetCookie(&http.Cookie{
+		Name:     "access_token",
+		Value:    accessToken,
+		Expires:  accessExpiration,
+		Secure:   true,
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
 	})
 	return c.JSON(http.StatusOK, res)
 }
