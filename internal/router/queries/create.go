@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 )
 
+// CreateRefreshToken inserts a new refresh token for an account.
 func CreateRefreshToken(
 	accountID uuid.UUID,
 	expirationDate time.Time,

@@ -1,6 +1,7 @@
 package router
 
 import (
+	"isis_account/internal/types"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -20,14 +21,14 @@ type JWTClaims struct {
 }
 
 func GenerateClaims(
-	accoutID uuid.UUID,
+	accountID uuid.UUID,
 	roleID uuid.UUID,
 	username string,
 	expiresAt time.Time,
 ) JWTClaims {
 	return JWTClaims{
 		ClaimsData: ClaimsData{
-			AccountID: accoutID,
+			AccountID: accountID,
 			RoleID:    roleID,
 			Username:  username,
 		},
@@ -37,16 +38,47 @@ func GenerateClaims(
 	}
 }
 
-func GenerateToken(claims JWTClaims, secret []byte) (string, error) {
+func GetToken(c echo.Context) (*jwt.Token, error) {
+	// Get cookie
+	cookie, err := c.Cookie("access_token")
+	if err != nil {
+		return nil, types.TokenError
+	}
+
+	// Parse token
+	tokenString := cookie.Value
+	token, err := jwt.ParseWithClaims(
+		tokenString,
+		&JWTClaims{},
+		func(t *jwt.Token) (interface{}, error) {
+			_, ok := t.Method.(*jwt.SigningMethodHMAC)
+			if !ok {
+				return nil, types.ParseTokenError
+			}
+			return []byte("secret"), nil // TODO: Configurable JWT secret
+		},
+		jwt.WithoutClaimsValidation(), // get claims from expired tokens (refresh)
+	)
+	if err != nil {
+		return nil, types.TokenError
+	}
+	return token, nil
+}
+
+func GetClaims(c echo.Context, token *jwt.Token) (*JWTClaims, error) {
+	// Parse token claims
+	claims, ok := token.Claims.(*JWTClaims)
+	if !ok {
+		return nil, types.ClaimsError
+	}
+	return claims, nil
+}
+
+func GenerateToken(claims JWTClaims) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	t, err := token.SignedString(secret)
+	t, err := token.SignedString([]byte("secret")) // TODO: Configurable JWT secret
 	if err != nil {
 		return "", err
 	}
 	return t, nil
-}
-
-// NewClaims generates a new JWTClaims.
-func NewClaims(c echo.Context) jwt.Claims {
-	return new(JWTClaims) // TODO: Create a claims builder function
 }

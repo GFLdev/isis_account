@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/golang-jwt/jwt/v5"
 	echojwt "github.com/labstack/echo-jwt/v4"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -150,9 +151,12 @@ func NewRouter() *echo.Echo {
 		jwtSecret = "secret"
 	}
 	jwtConfig := echojwt.Config{
-		NewClaimsFunc: NewClaims,
+		NewClaimsFunc: func(c echo.Context) jwt.Claims {
+			return new(JWTClaims)
+		},
 		SigningKey:    []byte(jwtSecret),
 		SigningMethod: "HS256", // HMAC with SHA-256
+		TokenLookup:   "cookie:access_token",
 	}
 	restricted.Use(echojwt.WithConfig(jwtConfig))
 
