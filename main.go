@@ -3,10 +3,12 @@ package main
 import (
 	"fmt"
 	"isis_account/internal/config"
+	"isis_account/internal/database"
 	"isis_account/internal/router"
 	"isis_account/internal/types"
 	"os"
 	"strconv"
+	"time"
 
 	"go.uber.org/zap"
 )
@@ -43,9 +45,17 @@ func main() {
 	// Initiate config
 	cfg := config.GetConfig()
 
-	// Close database connection
+	// Initiate database
+	db, err := database.GetInstance()
+	for i := 1; err != nil; i++ {
+		zap.L().Warn("Could not ping database ["+strconv.Itoa(i)+"]",
+			zap.Error(err),
+		)
+		time.Sleep(3 * time.Second) // try again after 3 seconds
+		db, err = database.GetInstance()
+	}
 	defer func() {
-		err := cfg.DB.Close()
+		err := db.Close()
 		if err != nil {
 			zap.L().Error("Could not close database connection",
 				zap.Error(err),

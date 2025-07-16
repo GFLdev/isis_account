@@ -22,7 +22,7 @@ func AuthLoginHandler(c echo.Context) error {
 	c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 
 	// Read and parse body
-	body, err := utils.ParseHTTPBody[types.HTTPAuthLoginReq](&c.Request().Body)
+	body, err := utils.JSONToStruct[types.HTTPAuthLoginReq](c.Request().Body)
 	if err != nil {
 		c.JSON(
 			http.StatusInternalServerError,

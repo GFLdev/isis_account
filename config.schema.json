@@ -1,0 +1,20 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/GFLdev/isis_account/refs/heads/main/config.schema.json",
+  "title": "ISIS Account Config",
+  "description": "ISIS Account configuration file",
+  "type": "object",
+  "properties": {
+    "env": {
+      "description": "Environment that ISIS Account will run",
+      "type": "string",
+      "enum": ["prd", "dev", "tst"]
+    },
+    "port": {
+      "description": "Port thar ISIS Account will run",
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "exclusiveMaximum": 65535
+    }
+  }
+}

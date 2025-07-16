@@ -1,6 +1,7 @@
 package router
 
 import (
+	"isis_account/internal/config"
 	"isis_account/internal/types"
 	"time"
 
@@ -39,6 +40,9 @@ func GenerateClaims(
 }
 
 func GetToken(c echo.Context) (*jwt.Token, error) {
+	// Get config
+	cfg := config.GetConfig()
+
 	// Get cookie
 	cookie, err := c.Cookie("access_token")
 	if err != nil {
@@ -55,7 +59,7 @@ func GetToken(c echo.Context) (*jwt.Token, error) {
 			if !ok {
 				return nil, types.ParseTokenError
 			}
-			return []byte("secret"), nil // TODO: Configurable JWT secret
+			return []byte(cfg.JWT.Secret), nil
 		},
 		jwt.WithoutClaimsValidation(), // get claims from expired tokens (refresh)
 	)
@@ -75,8 +79,9 @@ func GetClaims(c echo.Context, token *jwt.Token) (*JWTClaims, error) {
 }
 
 func GenerateToken(claims JWTClaims) (string, error) {
+	cfg := config.GetConfig()
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	t, err := token.SignedString([]byte("secret")) // TODO: Configurable JWT secret
+	t, err := token.SignedString([]byte(cfg.JWT.Secret))
 	if err != nil {
 		return "", err
 	}
