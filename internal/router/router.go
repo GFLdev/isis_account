@@ -2,9 +2,9 @@ package router
 
 import (
 	"encoding/json"
+	"isis_account/internal/config"
 	"isis_account/internal/utils"
 	"net/http"
-	"os"
 
 	"github.com/golang-jwt/jwt/v5"
 	echojwt "github.com/labstack/echo-jwt/v4"
@@ -76,6 +76,9 @@ func logHTTPInfo(c echo.Context, reqBody, resBody []byte) {
 
 // configMiddlewares configure the middlewares for the echo router.
 func configMiddlewares(e *echo.Echo) *echo.Echo {
+	// Get config
+	cfg := config.GetConfig()
+
 	// Redirect to HTTPS
 	// FIXME: Commented for testing purposes
 	// e.Pre(middleware.HTTPSRedirect())
@@ -83,7 +86,7 @@ func configMiddlewares(e *echo.Echo) *echo.Echo {
 	// CORS config
 	corsConfig := middleware.CORSConfig{
 		AllowCredentials: true,
-		AllowOrigins:     []string{"*"}, // TODO: Change to configurable origins
+		AllowOrigins:     cfg.Origins,
 		AllowMethods: []string{
 			echo.GET,
 			echo.POST,
@@ -128,6 +131,9 @@ func configMiddlewares(e *echo.Echo) *echo.Echo {
 
 // NewRouter build and configure the ISIS account service router.
 func NewRouter() *echo.Echo {
+	// Get config
+	cfg := config.GetConfig()
+
 	// New echo router with middlewares
 	e := echo.New()
 	e.HideBanner = true                           // hide start banner
@@ -145,16 +151,11 @@ func NewRouter() *echo.Echo {
 	log := restricted.Group("/log")
 
 	// JWT
-	jwtSecret := os.Getenv("JWT_SECRET") // TODO: Create config struct
-	if jwtSecret == "" {
-		zap.L().Warn("JWT secret not defined, defaulting to \"secret\"")
-		jwtSecret = "secret"
-	}
 	jwtConfig := echojwt.Config{
 		NewClaimsFunc: func(c echo.Context) jwt.Claims {
 			return new(JWTClaims)
 		},
-		SigningKey:    []byte(jwtSecret),
+		SigningKey:    []byte(cfg.JWT.Secret),
 		SigningMethod: "HS256", // HMAC with SHA-256
 		TokenLookup:   "cookie:access_token",
 	}
