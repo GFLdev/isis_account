@@ -68,11 +68,13 @@ func ValidateStruct(val any) error {
 }
 
 // JSONToStruct parses JSON io.Reader to T struct.
-func JSONToStruct[T any](r io.Reader) (T, error) {
+func JSONToStruct[T any](r io.Reader, allowUnknownFields bool) (T, error) {
 	// Unmarshalling to JSON
 	var val T
 	decoder := json.NewDecoder(r)
-	decoder.DisallowUnknownFields()
+	if !allowUnknownFields {
+		decoder.DisallowUnknownFields()
+	}
 	err := decoder.Decode(&val) // decodes JSON to struct
 	if err != nil {
 		return val, err

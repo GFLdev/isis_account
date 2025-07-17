@@ -27,7 +27,7 @@ type Config struct {
 	// Port is the port that ISIS Account will be running.
 	Port int `json:"port" validate:"min=0,max=65535"`
 	// Origins are the origins for handling CORS.
-	Origins []string `json:"origins" validate:"dive,unique"`
+	Origins []string `json:"origins" validate:"unique"`
 	// DB represents the PostgreSQL database credentials.
 	DB struct {
 		// Host is the PostgreSQL server's hostname/ip.
@@ -74,7 +74,7 @@ func initConfig() {
 
 	// Parse configuration
 	reader := bytes.NewReader(*payload)
-	cfg, err := utils.JSONToStruct[Config](reader)
+	cfg, err := utils.JSONToStruct[Config](reader, true)
 	if err != nil {
 		zap.L().Fatal("Could not parse config file '"+ConfigFile+"'",
 			zap.Error(err),
