@@ -27,7 +27,7 @@ type Config struct {
 	// Port is the port that ISIS Account will be running.
 	Port int `json:"port" validate:"min=0,max=65535"`
 	// Origins are the origins for handling CORS.
-	Origins []string `json:"origins"`
+	Origins []string `json:"origins" validate:"dive,unique"`
 	// DB represents the PostgreSQL database credentials.
 	DB struct {
 		// Host is the PostgreSQL server's hostname/ip.
@@ -90,14 +90,12 @@ func initConfig() {
 	}
 
 	// Default optional values
-	// If cfg.Port is not set, it will automatically
-	// be set to 0 (random available port)
 	if cfg.Env == "" {
 		zap.L().Info("Defaulting environment to 'tst'")
 		cfg.Env = TST // Default to test environment
 	}
 	if len(cfg.Origins) == 0 {
-		zap.L().Info("Defaulting CORS origins to '*'")
+		zap.L().Info("Defaulting allowed origins to '*'")
 		cfg.Origins = []string{"*"} // Default to all origins
 	}
 	if cfg.JWT.AccessTokenMinutes == 0 {

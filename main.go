@@ -6,6 +6,7 @@ import (
 	"isis_account/internal/database"
 	"isis_account/internal/router"
 	"isis_account/internal/types"
+	"net"
 	"os"
 	"strconv"
 	"time"
@@ -63,10 +64,18 @@ func main() {
 		}
 	}()
 
-	// New router
-	r := router.NewRouter()
+	// New listener
+	listener, err := net.Listen("tcp", ":"+strconv.Itoa(cfg.Port))
+	if err != nil {
+		zap.L().Fatal("Cannot start server on port "+strconv.Itoa(cfg.Port),
+			zap.Error(err),
+		)
+	}
+	cfg.Port = listener.Addr().(*net.TCPAddr).Port
 
-	// Serve
+	// New router and serve
+	r := router.NewRouter()
+	r.Listener = listener
 	zap.L().Info("Serving on port " + strconv.Itoa(cfg.Port))
 	r.Logger.Fatal(r.Start(":" + strconv.Itoa(cfg.Port)))
 }
