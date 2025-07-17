@@ -2,6 +2,7 @@ package types
 
 import (
 	"database/sql"
+	"net"
 	"time"
 
 	"github.com/google/uuid"
@@ -36,7 +37,16 @@ type Account struct {
 }
 
 type RefreshToken struct {
-	RefreshTokenID uuid.UUID `json:"refresh_token_id" validate:"required,uuid"`
+	RefreshTokenID uuid.UUID `json:"refresh_token_id" validate:"required"`
 	AccountID      uuid.UUID `json:"account_id" validate:"required,uuid"`
 	ExpirationDate time.Time `json:"expiration_date" validate:"required"`
+}
+
+type LoginAttempt struct {
+	LoginAttemptID uuid.UUID `json:"login_attempt_id" validate:"required,uuid"`
+	AccountID      uuid.UUID `json:"account_id" validate:"required,uuid"`
+	AttemptedAt    time.Time `json:"attempted_at" validate:"required"`
+	Success        bool      `json:"success" validate:"boolean"`
+	IPAddress      net.IP    `json:"ip_address" validate:"required"` // TODO: IP validation
+	UserAgent      string    `json:"user_agent" validate:"required"`
 }

@@ -11,16 +11,17 @@ authentication, refresh tokens and audit logging. It is a core component in the 
 
 ## Features
 
-- JWT-based authentication with refresh token support. **(Not implemented)**
+- JWT-based authentication with refresh token support.
 - User account creation, update, deactivation and deletion. **(Not implemented)**
 - Group-based access control (RBAC). **(Not implemented)**
-- Login attempts tracking with IP and User-Agent logging. **(Not implemented)**
-- Refresh token issuance and expiration control. **(Not implemented)**
+- Login attempts tracking with IP and User-Agent logging. **(In progress)**
+- Refresh token issuance and expiration control.
 - Structured audit logging for account-related actions. **(Not implemented)**
 
 ## Requirements
 
 To use or contribute to this project, ensure the following packages are installed on your system:
+
 - **Go 1.24+**
 - **PostgreSQL**
 - **Docker** (for containerized deployment)
@@ -36,16 +37,14 @@ cd isis_account
 
 ### 2. Build the Docker image
 
-By default, the service listens on port `8080`.
-
 ```bash
-docker build --build-arg PORT=8080 -t isis-account-service .
+docker build -t isis-account-service .
 ```
 
 ### 3. Run the container
 
 ```bash
-docker run --env-file .env -p 8080:8080 isis-account-service
+docker run isis-account-service
 ```
 
 ## Documentation
@@ -70,3 +69,4 @@ This project is licensed under [MIT](./LICENSE). See the LICENSE file for more d
 ## Contact
 
 For questions or support, feel free to contact the development team at [gabriel.franco@gfldev.com](mailto:gabriel.franco@gfldev.com]).
+

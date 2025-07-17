@@ -3,18 +3,18 @@ package router
 import (
 	"database/sql"
 	"errors"
+	"isis_account/internal/config"
 	"isis_account/internal/router/queries"
 	"isis_account/internal/types"
 	"isis_account/internal/utils"
+	"net"
 	"net/http"
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 )
-
-// BcryptCost is the total iterations for bcrypt's algorithm.
-const BcryptCost = 12
 
 // AuthLoginHandler handles login via username and password.
 func AuthLoginHandler(c echo.Context) error {
@@ -57,8 +57,16 @@ func AuthLoginHandler(c echo.Context) error {
 	}
 
 	// Compare
+	ts := time.Now()
 	err = bcrypt.CompareHashAndPassword(acc.Password, []byte(body.Password))
 	if err != nil {
+		newLoginAttempt(
+			acc.AccountID,
+			ts,
+			false,
+			net.ParseIP(c.RealIP()),
+			c.Request().UserAgent(),
+		)
 		c.JSON(
 			http.StatusBadRequest,
 			types.HTTPMessageResponse{Message: types.IncorrectCredentials.Error()},
@@ -67,9 +75,9 @@ func AuthLoginHandler(c echo.Context) error {
 	}
 
 	// Generate access token
-	// TODO: Configurable JWT expire duration
-	accessDuration := time.Duration(30) * time.Minute
-	accessExpiration := time.Now().Add(accessDuration)
+	cfg := config.GetConfig() // get config
+	accessDuration := time.Duration(cfg.JWT.AccessTokenMinutes) * time.Minute
+	accessExpiration := ts.Add(accessDuration)
 	claims := GenerateClaims(
 		acc.AccountID,
 		acc.RoleID,
@@ -78,6 +86,13 @@ func AuthLoginHandler(c echo.Context) error {
 	)
 	accessToken, err := GenerateToken(claims)
 	if err != nil {
+		newLoginAttempt(
+			acc.AccountID,
+			ts,
+			false,
+			net.ParseIP(c.RealIP()),
+			c.Request().UserAgent(),
+		)
 		c.JSON(
 			http.StatusInternalServerError,
 			types.HTTPMessageResponse{Message: types.ParsingError.Error()},
@@ -86,14 +101,20 @@ func AuthLoginHandler(c echo.Context) error {
 	}
 
 	// Generate refresh token
-	// TODO: Configurable JWT expire duration
-	refreshDuration := time.Duration(48) * time.Hour
-	refreshExpiration := time.Now().Add(refreshDuration)
+	refreshDuration := time.Duration(cfg.JWT.RefreshTokenHours) * time.Hour
+	refreshExpiration := ts.Add(refreshDuration)
 	refreshToken, err := queries.CreateRefreshToken(
 		acc.AccountID,
 		refreshExpiration,
 	)
 	if err != nil {
+		newLoginAttempt(
+			acc.AccountID,
+			ts,
+			false,
+			net.ParseIP(c.RealIP()),
+			c.Request().UserAgent(),
+		)
 		c.JSON(
 			http.StatusInternalServerError,
 			types.HTTPMessageResponse{Message: types.InternalError.Error()},
@@ -108,6 +129,13 @@ func AuthLoginHandler(c echo.Context) error {
 	}
 	err = utils.ValidateStruct(res)
 	if err != nil {
+		newLoginAttempt(
+			acc.AccountID,
+			ts,
+			false,
+			net.ParseIP(c.RealIP()),
+			c.Request().UserAgent(),
+		)
 		c.JSON(
 			http.StatusInternalServerError,
 			types.HTTPMessageResponse{Message: types.ParsingError.Error()},
@@ -115,7 +143,22 @@ func AuthLoginHandler(c echo.Context) error {
 		return err
 	}
 
+	// Update last login
+	err = queries.UpdateLogin(acc.AccountID, ts)
+	if err != nil {
+		zap.L().Warn("Could not update last login for "+acc.AccountID.String(),
+			zap.Error(err),
+		)
+	}
+
 	// Set cookies and return
+	newLoginAttempt(
+		acc.AccountID,
+		ts,
+		true,
+		net.ParseIP(c.RealIP()),
+		c.Request().UserAgent(),
+	)
 	c.SetCookie(&http.Cookie{
 		Name:     "refresh_token",
 		Value:    refreshToken.RefreshTokenID.String(),
@@ -168,11 +211,18 @@ func AuthRefreshHandler(c echo.Context) error {
 	}
 
 	// Check if token is expired
-	now := time.Now()
-	if claims.ExpiresAt.Compare(now) < 1 {
+	ts := time.Now()
+	if claims.ExpiresAt.Compare(ts) < 1 {
 		// Refresh token provided by the user
 		reqToken, err := c.Cookie("refresh_token")
-		if err != nil || reqToken.Expires.Compare(now) < 1 {
+		if err != nil || reqToken.Expires.Compare(ts) < 1 {
+			newLoginAttempt(
+				claims.AccountID,
+				ts,
+				false,
+				net.ParseIP(c.RealIP()),
+				c.Request().UserAgent(),
+			)
 			return c.JSON(
 				http.StatusUnauthorized,
 				types.HTTPMessageResponse{Message: types.SessionExpired.Error()},
@@ -181,12 +231,26 @@ func AuthRefreshHandler(c echo.Context) error {
 
 		// Get account's refresh token
 		refreshToken, err := queries.GetRefreshTokenByAccount(claims.AccountID)
-		if err == sql.ErrNoRows || refreshToken.ExpirationDate.Compare(now) < 1 {
+		if err == sql.ErrNoRows || refreshToken.ExpirationDate.Compare(ts) < 1 {
+			newLoginAttempt(
+				claims.AccountID,
+				ts,
+				false,
+				net.ParseIP(c.RealIP()),
+				c.Request().UserAgent(),
+			)
 			return c.JSON(
 				http.StatusUnauthorized,
 				types.HTTPMessageResponse{Message: types.SessionExpired.Error()},
 			)
 		} else if err != nil {
+			newLoginAttempt(
+				claims.AccountID,
+				ts,
+				false,
+				net.ParseIP(c.RealIP()),
+				c.Request().UserAgent(),
+			)
 			c.JSON(
 				http.StatusInternalServerError,
 				types.HTTPMessageResponse{Message: types.InternalError.Error()},
@@ -195,8 +259,16 @@ func AuthRefreshHandler(c echo.Context) error {
 		}
 
 		// Check if the refresh tokens are the same
-		// TODO: Encrypt refresh token
-		if reqToken.Value != refreshToken.RefreshTokenID.String() {
+		hashedToken := []byte(refreshToken.RefreshTokenID.String())
+		err = bcrypt.CompareHashAndPassword(hashedToken, []byte(reqToken.Value))
+		if err != nil {
+			newLoginAttempt(
+				claims.AccountID,
+				ts,
+				false,
+				net.ParseIP(c.RealIP()),
+				c.Request().UserAgent(),
+			)
 			return c.JSON(
 				http.StatusUnauthorized,
 				types.HTTPMessageResponse{Message: types.SessionExpired.Error()},
@@ -205,9 +277,9 @@ func AuthRefreshHandler(c echo.Context) error {
 	}
 
 	// Generate access token
-	// TODO: Configurable JWT expire duration
-	accessDuration := time.Duration(30) * time.Minute
-	accessExpiration := time.Now().Add(accessDuration)
+	cfg := config.GetConfig() // get config
+	accessDuration := time.Duration(cfg.JWT.AccessTokenMinutes) * time.Minute
+	accessExpiration := ts.Add(accessDuration)
 	newClaims := GenerateClaims(
 		claims.AccountID,
 		claims.RoleID,
@@ -216,6 +288,13 @@ func AuthRefreshHandler(c echo.Context) error {
 	)
 	accessToken, err := GenerateToken(newClaims)
 	if err != nil {
+		newLoginAttempt(
+			claims.AccountID,
+			ts,
+			false,
+			net.ParseIP(c.RealIP()),
+			c.Request().UserAgent(),
+		)
 		c.JSON(
 			http.StatusInternalServerError,
 			types.HTTPMessageResponse{Message: types.ParsingError.Error()},
@@ -224,14 +303,20 @@ func AuthRefreshHandler(c echo.Context) error {
 	}
 
 	// Generate refresh token
-	// TODO: Configurable JWT expire duration
-	refreshDuration := time.Duration(48) * time.Hour
-	refreshExpiration := time.Now().Add(refreshDuration)
+	refreshDuration := time.Duration(cfg.JWT.RefreshTokenHours) * time.Hour
+	refreshExpiration := ts.Add(refreshDuration)
 	refreshToken, err := queries.CreateRefreshToken(
 		newClaims.AccountID,
 		refreshExpiration,
 	)
 	if err != nil {
+		newLoginAttempt(
+			claims.AccountID,
+			ts,
+			false,
+			net.ParseIP(c.RealIP()),
+			c.Request().UserAgent(),
+		)
 		c.JSON(
 			http.StatusInternalServerError,
 			types.HTTPMessageResponse{Message: types.InternalError.Error()},
@@ -246,6 +331,13 @@ func AuthRefreshHandler(c echo.Context) error {
 	}
 	err = utils.ValidateStruct(res)
 	if err != nil {
+		newLoginAttempt(
+			claims.AccountID,
+			ts,
+			false,
+			net.ParseIP(c.RealIP()),
+			c.Request().UserAgent(),
+		)
 		c.JSON(
 			http.StatusInternalServerError,
 			types.HTTPMessageResponse{Message: types.ParsingError.Error()},
@@ -253,7 +345,22 @@ func AuthRefreshHandler(c echo.Context) error {
 		return err
 	}
 
+	// Update last login
+	err = queries.UpdateLogin(newClaims.AccountID, ts)
+	if err != nil {
+		zap.L().Warn("Could not update last login for "+newClaims.AccountID.String(),
+			zap.Error(err),
+		)
+	}
+
 	// Set cookies and return
+	newLoginAttempt(
+		claims.AccountID,
+		ts,
+		true,
+		net.ParseIP(c.RealIP()),
+		c.Request().UserAgent(),
+	)
 	c.SetCookie(&http.Cookie{
 		Name:     "refresh_token",
 		Value:    refreshToken.RefreshTokenID.String(),
