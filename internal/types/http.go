@@ -2,6 +2,13 @@ package types
 
 import "github.com/google/uuid"
 
+type SuccessMessages string
+
+const (
+	LoggedOut        SuccessMessages = "User logged out successfully"
+	AlreadyLoggedOut SuccessMessages = "User already logged out"
+)
+
 type HTTPMessageResponse struct {
 	Message string `json:"message"`
 }

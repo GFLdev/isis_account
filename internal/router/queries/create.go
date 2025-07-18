@@ -18,7 +18,7 @@ func CreateRefreshToken(
 ) (*types.RefreshToken, error) {
 	// Build data and validates
 	refreshToken := types.RefreshToken{
-		RefreshTokenID: uuid.New(),
+		RefreshTokenID: uuid.New().String(),
 		AccountID:      accountID,
 		ExpirationDate: expirationDate,
 	}
@@ -29,7 +29,7 @@ func CreateRefreshToken(
 
 	// Hash refresh token
 	hashedToken, err := bcrypt.GenerateFromPassword(
-		[]byte(refreshToken.RefreshTokenID.String()),
+		[]byte(refreshToken.RefreshTokenID),
 		BcryptCost,
 	)
 	if err != nil {

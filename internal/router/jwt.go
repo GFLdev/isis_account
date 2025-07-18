@@ -3,10 +3,12 @@ package router
 import (
 	"isis_account/internal/config"
 	"isis_account/internal/types"
+	"net/http"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	echojwt "github.com/labstack/echo-jwt/v4"
 	"github.com/labstack/echo/v4"
 )
 
@@ -86,4 +88,24 @@ func GenerateToken(claims JWTClaims) (string, error) {
 		return "", err
 	}
 	return t, nil
+}
+
+func AuthErrorHandler(c echo.Context, err error) error {
+	switch err {
+	case echojwt.ErrJWTMissing:
+		return c.JSON(
+			http.StatusUnauthorized,
+			types.HTTPMessageResponse{Message: types.TokenError.Error()},
+		)
+	case echojwt.ErrJWTInvalid:
+		return c.JSON(
+			http.StatusUnauthorized,
+			types.HTTPMessageResponse{Message: types.ParseTokenError.Error()},
+		)
+	default:
+		return c.JSON(
+			http.StatusUnauthorized,
+			types.HTTPMessageResponse{Message: types.AuthFailedError.Error()},
+		)
+	}
 }

@@ -56,17 +56,20 @@ func AuthLoginHandler(c echo.Context) error {
 		)
 	}
 
-	// Compare
+	// New login attempt
 	ts := time.Now()
+	loginAttemptConfig := types.LoginAttemptConfig{
+		AccountID:   acc.AccountID,
+		AttemptedAt: ts,
+		Success:     false,
+		IPAddress:   net.ParseIP(c.RealIP()),
+		UserAgent:   c.Request().UserAgent(),
+	}
+
+	// Compare
 	err = bcrypt.CompareHashAndPassword(acc.Password, []byte(body.Password))
 	if err != nil {
-		newLoginAttempt(
-			acc.AccountID,
-			ts,
-			false,
-			net.ParseIP(c.RealIP()),
-			c.Request().UserAgent(),
-		)
+		newLoginAttempt(loginAttemptConfig)
 		c.JSON(
 			http.StatusBadRequest,
 			types.HTTPMessageResponse{Message: types.IncorrectCredentials.Error()},
@@ -86,13 +89,7 @@ func AuthLoginHandler(c echo.Context) error {
 	)
 	accessToken, err := GenerateToken(claims)
 	if err != nil {
-		newLoginAttempt(
-			acc.AccountID,
-			ts,
-			false,
-			net.ParseIP(c.RealIP()),
-			c.Request().UserAgent(),
-		)
+		newLoginAttempt(loginAttemptConfig)
 		c.JSON(
 			http.StatusInternalServerError,
 			types.HTTPMessageResponse{Message: types.ParsingError.Error()},
@@ -108,13 +105,7 @@ func AuthLoginHandler(c echo.Context) error {
 		refreshExpiration,
 	)
 	if err != nil {
-		newLoginAttempt(
-			acc.AccountID,
-			ts,
-			false,
-			net.ParseIP(c.RealIP()),
-			c.Request().UserAgent(),
-		)
+		newLoginAttempt(loginAttemptConfig)
 		c.JSON(
 			http.StatusInternalServerError,
 			types.HTTPMessageResponse{Message: types.InternalError.Error()},
@@ -129,13 +120,7 @@ func AuthLoginHandler(c echo.Context) error {
 	}
 	err = utils.ValidateStruct(res)
 	if err != nil {
-		newLoginAttempt(
-			acc.AccountID,
-			ts,
-			false,
-			net.ParseIP(c.RealIP()),
-			c.Request().UserAgent(),
-		)
+		newLoginAttempt(loginAttemptConfig)
 		c.JSON(
 			http.StatusInternalServerError,
 			types.HTTPMessageResponse{Message: types.ParsingError.Error()},
@@ -152,16 +137,12 @@ func AuthLoginHandler(c echo.Context) error {
 	}
 
 	// Set cookies and return
-	newLoginAttempt(
-		acc.AccountID,
-		ts,
-		true,
-		net.ParseIP(c.RealIP()),
-		c.Request().UserAgent(),
-	)
+	loginAttemptConfig.Success = true
+	newLoginAttempt(loginAttemptConfig)
 	c.SetCookie(&http.Cookie{
 		Name:     "refresh_token",
-		Value:    refreshToken.RefreshTokenID.String(),
+		Value:    refreshToken.RefreshTokenID,
+		Path:     "/",
 		Expires:  refreshExpiration,
 		Secure:   true,
 		HttpOnly: true,
@@ -170,6 +151,7 @@ func AuthLoginHandler(c echo.Context) error {
 	c.SetCookie(&http.Cookie{
 		Name:     "access_token",
 		Value:    accessToken,
+		Path:     "/",
 		Expires:  accessExpiration,
 		Secure:   true,
 		HttpOnly: true,
@@ -210,19 +192,22 @@ func AuthRefreshHandler(c echo.Context) error {
 		return err
 	}
 
-	// Check if token is expired
+	// New login attempt
 	ts := time.Now()
+	loginAttemptConfig := types.LoginAttemptConfig{
+		AccountID:   claims.AccountID,
+		AttemptedAt: ts,
+		Success:     false,
+		IPAddress:   net.ParseIP(c.RealIP()),
+		UserAgent:   c.Request().UserAgent(),
+	}
+
+	// Check if token is expired
 	if claims.ExpiresAt.Compare(ts) < 1 {
 		// Refresh token provided by the user
 		reqToken, err := c.Cookie("refresh_token")
 		if err != nil || reqToken.Expires.Compare(ts) < 1 {
-			newLoginAttempt(
-				claims.AccountID,
-				ts,
-				false,
-				net.ParseIP(c.RealIP()),
-				c.Request().UserAgent(),
-			)
+			newLoginAttempt(loginAttemptConfig)
 			return c.JSON(
 				http.StatusUnauthorized,
 				types.HTTPMessageResponse{Message: types.SessionExpired.Error()},
@@ -232,25 +217,13 @@ func AuthRefreshHandler(c echo.Context) error {
 		// Get account's refresh token
 		refreshToken, err := queries.GetRefreshTokenByAccount(claims.AccountID)
 		if err == sql.ErrNoRows || refreshToken.ExpirationDate.Compare(ts) < 1 {
-			newLoginAttempt(
-				claims.AccountID,
-				ts,
-				false,
-				net.ParseIP(c.RealIP()),
-				c.Request().UserAgent(),
-			)
+			newLoginAttempt(loginAttemptConfig)
 			return c.JSON(
 				http.StatusUnauthorized,
 				types.HTTPMessageResponse{Message: types.SessionExpired.Error()},
 			)
 		} else if err != nil {
-			newLoginAttempt(
-				claims.AccountID,
-				ts,
-				false,
-				net.ParseIP(c.RealIP()),
-				c.Request().UserAgent(),
-			)
+			newLoginAttempt(loginAttemptConfig)
 			c.JSON(
 				http.StatusInternalServerError,
 				types.HTTPMessageResponse{Message: types.InternalError.Error()},
@@ -259,16 +232,10 @@ func AuthRefreshHandler(c echo.Context) error {
 		}
 
 		// Check if the refresh tokens are the same
-		hashedToken := []byte(refreshToken.RefreshTokenID.String())
+		hashedToken := []byte(refreshToken.RefreshTokenID)
 		err = bcrypt.CompareHashAndPassword(hashedToken, []byte(reqToken.Value))
 		if err != nil {
-			newLoginAttempt(
-				claims.AccountID,
-				ts,
-				false,
-				net.ParseIP(c.RealIP()),
-				c.Request().UserAgent(),
-			)
+			newLoginAttempt(loginAttemptConfig)
 			return c.JSON(
 				http.StatusUnauthorized,
 				types.HTTPMessageResponse{Message: types.SessionExpired.Error()},
@@ -288,13 +255,7 @@ func AuthRefreshHandler(c echo.Context) error {
 	)
 	accessToken, err := GenerateToken(newClaims)
 	if err != nil {
-		newLoginAttempt(
-			claims.AccountID,
-			ts,
-			false,
-			net.ParseIP(c.RealIP()),
-			c.Request().UserAgent(),
-		)
+		newLoginAttempt(loginAttemptConfig)
 		c.JSON(
 			http.StatusInternalServerError,
 			types.HTTPMessageResponse{Message: types.ParsingError.Error()},
@@ -310,13 +271,7 @@ func AuthRefreshHandler(c echo.Context) error {
 		refreshExpiration,
 	)
 	if err != nil {
-		newLoginAttempt(
-			claims.AccountID,
-			ts,
-			false,
-			net.ParseIP(c.RealIP()),
-			c.Request().UserAgent(),
-		)
+		newLoginAttempt(loginAttemptConfig)
 		c.JSON(
 			http.StatusInternalServerError,
 			types.HTTPMessageResponse{Message: types.InternalError.Error()},
@@ -331,13 +286,7 @@ func AuthRefreshHandler(c echo.Context) error {
 	}
 	err = utils.ValidateStruct(res)
 	if err != nil {
-		newLoginAttempt(
-			claims.AccountID,
-			ts,
-			false,
-			net.ParseIP(c.RealIP()),
-			c.Request().UserAgent(),
-		)
+		newLoginAttempt(loginAttemptConfig)
 		c.JSON(
 			http.StatusInternalServerError,
 			types.HTTPMessageResponse{Message: types.ParsingError.Error()},
@@ -354,16 +303,12 @@ func AuthRefreshHandler(c echo.Context) error {
 	}
 
 	// Set cookies and return
-	newLoginAttempt(
-		claims.AccountID,
-		ts,
-		true,
-		net.ParseIP(c.RealIP()),
-		c.Request().UserAgent(),
-	)
+	loginAttemptConfig.Success = true
+	newLoginAttempt(loginAttemptConfig)
 	c.SetCookie(&http.Cookie{
 		Name:     "refresh_token",
-		Value:    refreshToken.RefreshTokenID.String(),
+		Value:    refreshToken.RefreshTokenID,
+		Path:     "/",
 		Expires:  refreshExpiration,
 		Secure:   true,
 		HttpOnly: true,
@@ -372,6 +317,7 @@ func AuthRefreshHandler(c echo.Context) error {
 	c.SetCookie(&http.Cookie{
 		Name:     "access_token",
 		Value:    accessToken,
+		Path:     "/",
 		Expires:  accessExpiration,
 		Secure:   true,
 		HttpOnly: true,
@@ -385,9 +331,169 @@ func AuthLogoutHandler(c echo.Context) error {
 	// Headers
 	c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 
+	// Get token
+	token, err := GetToken(c)
+	if err != nil {
+		return c.JSON(
+			http.StatusOK,
+			types.HTTPMessageResponse{Message: string(types.AlreadyLoggedOut)},
+		)
+	}
+
+	// Get claims from token
+	claims, err := GetClaims(c, token)
+	if err != nil {
+		return c.JSON(
+			http.StatusOK,
+			types.HTTPMessageResponse{Message: string(types.AlreadyLoggedOut)},
+		)
+	}
+
+	// Check if token is expired
+	if claims.ExpiresAt.Compare(time.Now()) < 1 {
+		return c.JSON(
+			http.StatusOK,
+			types.HTTPMessageResponse{Message: string(types.AlreadyLoggedOut)},
+		)
+	}
+
+	// Reset cookies
+	c.SetCookie(&http.Cookie{
+		Name:     "refresh_token",
+		Value:    "",
+		Path:     "/",
+		Expires:  time.Unix(0, 0),
+		MaxAge:   -1,
+		Secure:   true,
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+	})
+	c.SetCookie(&http.Cookie{
+		Name:     "access_token",
+		Value:    "",
+		Path:     "/",
+		Expires:  time.Unix(0, 0),
+		MaxAge:   -1,
+		Secure:   true,
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+	})
+
 	// Response
 	return c.JSON(
 		http.StatusOK,
-		types.HTTPMessageResponse{Message: "/auth/logout reached"},
+		types.HTTPMessageResponse{Message: string(types.LoggedOut)},
+	)
+}
+
+// GetAccountsHandler handles all accounts fetching.
+func GetAccountsHandler(c echo.Context) error {
+	return c.JSON(
+		http.StatusNotImplemented,
+		types.HTTPMessageResponse{Message: types.NotImplemented.Error()},
+	)
+}
+
+// GetAccountHandler handles one account fetching.
+func GetAccountHandler(c echo.Context) error {
+	return c.JSON(
+		http.StatusNotImplemented,
+		types.HTTPMessageResponse{Message: types.NotImplemented.Error()},
+	)
+}
+
+// CreateAccountHandler handles the creation of an account.
+func CreateAccountHandler(c echo.Context) error {
+	return c.JSON(
+		http.StatusNotImplemented,
+		types.HTTPMessageResponse{Message: types.NotImplemented.Error()},
+	)
+}
+
+// UpdateAccountHandler handles one account update.
+func UpdateAccountHandler(c echo.Context) error {
+	return c.JSON(
+		http.StatusNotImplemented,
+		types.HTTPMessageResponse{Message: types.NotImplemented.Error()},
+	)
+}
+
+// DeleteAccountsHandler handles the deletion of all accounts.
+func DeleteAccountsHandler(c echo.Context) error {
+	return c.JSON(
+		http.StatusNotImplemented,
+		types.HTTPMessageResponse{Message: types.NotImplemented.Error()},
+	)
+}
+
+// DeleteAccountHandler handles the deletion of one account.
+func DeleteAccountHandler(c echo.Context) error {
+	return c.JSON(
+		http.StatusNotImplemented,
+		types.HTTPMessageResponse{Message: types.NotImplemented.Error()},
+	)
+}
+
+// GetRolesHandler handles all roles fetching.
+func GetRolesHandler(c echo.Context) error {
+	return c.JSON(
+		http.StatusNotImplemented,
+		types.HTTPMessageResponse{Message: types.NotImplemented.Error()},
+	)
+}
+
+// GetRoleHandler handles one role fetching.
+func GetRoleHandler(c echo.Context) error {
+	return c.JSON(
+		http.StatusNotImplemented,
+		types.HTTPMessageResponse{Message: types.NotImplemented.Error()},
+	)
+}
+
+// CreateRoleHandler handles the creation of a role.
+func CreateRoleHandler(c echo.Context) error {
+	return c.JSON(
+		http.StatusNotImplemented,
+		types.HTTPMessageResponse{Message: types.NotImplemented.Error()},
+	)
+}
+
+// UpdateRoleHandler handles one role update.
+func UpdateRoleHandler(c echo.Context) error {
+	return c.JSON(
+		http.StatusNotImplemented,
+		types.HTTPMessageResponse{Message: types.NotImplemented.Error()},
+	)
+}
+
+// DeleteRolesHandler handles the deletion of all roles.
+func DeleteRolesHandler(c echo.Context) error {
+	return c.JSON(
+		http.StatusNotImplemented,
+		types.HTTPMessageResponse{Message: types.NotImplemented.Error()},
+	)
+}
+
+// DeleteRoleHandler handles the deletion of one role.
+func DeleteRoleHandler(c echo.Context) error {
+	return c.JSON(
+		http.StatusNotImplemented,
+		types.HTTPMessageResponse{Message: types.NotImplemented.Error()},
+	)
+}
+
+// GetLogs handles all logs fetching.
+func GetLogs(c echo.Context) error {
+	return c.JSON(
+		http.StatusNotImplemented,
+		types.HTTPMessageResponse{Message: types.NotImplemented.Error()},
+	)
+}
+
+// GetLoginLogs handles all login attempt logs fetching.
+func GetLoginLogs(c echo.Context) error {
+	return c.JSON(
+		http.StatusNotImplemented,
+		types.HTTPMessageResponse{Message: types.NotImplemented.Error()},
 	)
 }

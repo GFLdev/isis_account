@@ -27,6 +27,9 @@ func httpErrorHandlerWithLogs(err error, c echo.Context) {
 			zap.Error(err),
 		)
 	}
+
+	// Continue to default error handler
+	c.Echo().DefaultHTTPErrorHandler(err, c)
 }
 
 // logHTTPInfo logs each request-response, filtering sensible data in the bodies.
@@ -139,49 +142,50 @@ func NewRouter() *echo.Echo {
 	e.HideBanner = true                           // hide start banner
 	e.HidePort = true                             // hide started port
 	e.IPExtractor = echo.ExtractIPFromXFFHeader() // extract IP
-	e.HTTPErrorHandler = httpErrorHandlerWithLogs // HTTP error with logging
+	// e.HTTPErrorHandler = httpErrorHandlerWithLogs // HTTP error with logging
 	configMiddlewares(e)
 
 	// Defining subroutes
 	auth := e.Group("/auth")
-
-	restricted := e.Group("/")
-	acc := restricted.Group("/account")
-	role := restricted.Group("/role")
-	log := restricted.Group("/log")
+	acc := e.Group("/account")
+	role := e.Group("/role")
+	log := e.Group("/log")
 
 	// JWT
 	jwtConfig := echojwt.Config{
 		NewClaimsFunc: func(c echo.Context) jwt.Claims {
 			return new(JWTClaims)
 		},
+		ErrorHandler:  AuthErrorHandler,
 		SigningKey:    []byte(cfg.JWT.Secret),
 		SigningMethod: "HS256", // HMAC with SHA-256
 		TokenLookup:   "cookie:access_token",
 	}
-	restricted.Use(echojwt.WithConfig(jwtConfig))
+	acc.Use(echojwt.WithConfig(jwtConfig))
+	role.Use(echojwt.WithConfig(jwtConfig))
+	log.Use(echojwt.WithConfig(jwtConfig))
 
 	// Defining routes
 	auth.POST("/login", AuthLoginHandler)
 	auth.POST("/refresh", AuthRefreshHandler)
 	auth.POST("/logout", AuthLogoutHandler)
 
-	acc.GET("/", func(c echo.Context) error { return nil })
-	acc.GET("/:id", func(c echo.Context) error { return nil })
-	acc.POST("/", func(c echo.Context) error { return nil })
-	acc.PATCH("/:id", func(c echo.Context) error { return nil })
-	acc.DELETE("/", func(c echo.Context) error { return nil })
-	acc.DELETE("/:id", func(c echo.Context) error { return nil })
+	acc.GET("", GetAccountsHandler)
+	acc.GET("/:id", GetAccountHandler)
+	acc.POST("", CreateAccountHandler)
+	acc.PATCH("/:id", UpdateAccountHandler)
+	acc.DELETE("", DeleteAccountsHandler)
+	acc.DELETE("/:id", DeleteAccountHandler)
 
-	role.GET("/", func(c echo.Context) error { return nil })
-	role.GET("/:id", func(c echo.Context) error { return nil })
-	role.POST("/", func(c echo.Context) error { return nil })
-	role.PATCH("/:id", func(c echo.Context) error { return nil })
-	role.DELETE("/", func(c echo.Context) error { return nil })
-	role.DELETE("/:id", func(c echo.Context) error { return nil })
+	role.GET("", GetRolesHandler)
+	role.GET("/:id", GetRoleHandler)
+	role.POST("", CreateRoleHandler)
+	role.PATCH("/:id", UpdateRoleHandler)
+	role.DELETE("", DeleteRolesHandler)
+	role.DELETE("/:id", DeleteRoleHandler)
 
-	log.GET("/", func(c echo.Context) error { return nil })
-	log.GET("/login", func(c echo.Context) error { return nil })
+	log.GET("", GetLogs)
+	log.GET("/login", GetLoginLogs)
 
 	// Preflight
 	e.OPTIONS("/*", func(c echo.Context) error {

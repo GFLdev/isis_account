@@ -14,6 +14,7 @@ var (
 	AccountNotFound         HTTPError = errors.New("Account not found")
 	NotFound                HTTPError = errors.New("Resource not found")
 	SessionExpired          HTTPError = errors.New("Session expired")
+	NotImplemented          HTTPError = errors.New("Resource not implemented yet")
 )
 
 // AuthError is enum for authentication errors.
@@ -23,4 +24,5 @@ var (
 	TokenError      AuthError = errors.New("Could not get token")
 	ParseTokenError AuthError = errors.New("Could not parse token")
 	ClaimsError     AuthError = errors.New("Could not parse token claims")
+	AuthFailedError AuthError = errors.New("Authentication failed")
 )

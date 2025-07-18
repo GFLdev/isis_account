@@ -14,7 +14,7 @@ authentication, refresh tokens and audit logging. It is a core component in the 
 - JWT-based authentication with refresh token support.
 - User account creation, update, deactivation and deletion. **(Not implemented)**
 - Group-based access control (RBAC). **(Not implemented)**
-- Login attempts tracking with IP and User-Agent logging. **(In progress)**
+- Login attempts tracking with IP and User-Agent logging.
 - Refresh token issuance and expiration control.
 - Structured audit logging for account-related actions. **(Not implemented)**
 
@@ -69,4 +69,3 @@ This project is licensed under [MIT](./LICENSE). See the LICENSE file for more d
 ## Contact
 
 For questions or support, feel free to contact the development team at [gabriel.franco@gfldev.com](mailto:gabriel.franco@gfldev.com]).
-

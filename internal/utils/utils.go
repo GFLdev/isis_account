@@ -63,8 +63,12 @@ func CloseFiles(files ...*os.File) {
 
 // ValidateStruct validates a struct. Return nil if it passes.
 func ValidateStruct(val any) error {
-	validate := validator.New() // new validator instance
-	return validate.Struct(val) // validate and return its result
+	// New validator and implement custom validations
+	validate := validator.New()
+	validate.RegisterValidation("ip_with_localhost", ValidateIPWithLocalHost)
+
+	// Validate
+	return validate.Struct(val)
 }
 
 // JSONToStruct parses JSON io.Reader to T struct.
