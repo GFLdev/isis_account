@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"isis_account/internal/types"
 	"net"
 
 	"github.com/go-playground/validator/v10"
@@ -14,4 +15,13 @@ func ValidateIPWithLocalHost(fl validator.FieldLevel) bool {
 		return false
 	}
 	return ip.To4() != nil || ip.To16() != nil // includes "::1"
+}
+
+// OffsetLessThanLimit is a custom validation for types.GetAccountsFilters,
+// requiring offset to be less than limit, if limit is not 0.
+func OffsetLessThanLimit(sl validator.StructLevel) {
+	f := sl.Current().Interface().(types.GetAccountsFilters)
+	if f.Limit > 0 && f.Offset > f.Limit {
+		sl.ReportError(f.Offset, "Offset", "offset", "ltefield", "Limit")
+	}
 }

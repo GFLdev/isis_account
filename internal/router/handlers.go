@@ -9,8 +9,10 @@ import (
 	"isis_account/internal/utils"
 	"net"
 	"net/http"
+	"strconv"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
@@ -388,10 +390,86 @@ func AuthLogoutHandler(c echo.Context) error {
 
 // GetAccountsHandler handles all accounts fetching.
 func GetAccountsHandler(c echo.Context) error {
-	return c.JSON(
-		http.StatusNotImplemented,
-		types.HTTPMessageResponse{Message: types.NotImplemented.Error()},
-	)
+	// Headers
+	c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+
+	// TODO: Check elevation
+
+	// Get query params and validate them
+	var err error
+	filters := types.GetAccountsFilters{}
+	qLimit := c.QueryParam("limit")
+	if qLimit != "" {
+		filters.Limit, err = strconv.Atoi(qLimit)
+		if err != nil {
+			c.JSON(
+				http.StatusBadRequest,
+				types.HTTPMessageResponse{Message: types.InvalidParameters.Error()},
+			)
+			return err
+		}
+	} else {
+		filters.Limit = 0 // default to all
+	}
+	qOffset := c.QueryParam("offset")
+	if qOffset != "" {
+		filters.Offset, err = strconv.Atoi(qOffset)
+		if err != nil {
+			c.JSON(
+				http.StatusBadRequest,
+				types.HTTPMessageResponse{Message: types.InvalidParameters.Error()},
+			)
+			return err
+		}
+	} else {
+		filters.Offset = 0 // default to 0 offset
+	}
+	qRoleID := c.QueryParam("role_id")
+	if qRoleID != "" {
+		filters.RoleID, err = uuid.Parse(qRoleID)
+		if err != nil {
+			c.JSON(
+				http.StatusBadRequest,
+				types.HTTPMessageResponse{Message: types.InvalidParameters.Error()},
+			)
+			return err
+		}
+	} else {
+		filters.RoleID = uuid.Nil // default to a null role
+	}
+	qIsActive := c.QueryParam("is_active")
+	if qIsActive == string(types.ActiveAccountFilter) ||
+		qIsActive == string(types.InactiveAccountFilter) {
+		filters.IsActive = types.AccountActivityFilter(qIsActive)
+	} else {
+		filters.IsActive = types.NoActivityAccountFilter // default to no filter
+	}
+
+	// Validate filters
+	err = utils.ValidateStruct(filters)
+	if err != nil {
+		c.JSON(
+			http.StatusBadRequest,
+			types.HTTPMessageResponse{Message: types.InvalidParameters.Error()},
+		)
+		return err
+	}
+
+	// Query all accounts
+	accs, err := queries.GetAllAcounts(filters)
+	if err != nil {
+		c.JSON(
+			http.StatusInternalServerError,
+			types.HTTPMessageResponse{Message: types.NoAccountsFound.Error()},
+		)
+		return err
+	} else if len(accs) == 0 {
+		return c.JSON(
+			http.StatusNoContent,
+			types.HTTPMessageResponse{Message: types.NoAccountsFound.Error()},
+		)
+	}
+	return c.JSON(http.StatusOK, accs)
 }
 
 // GetAccountHandler handles one account fetching.

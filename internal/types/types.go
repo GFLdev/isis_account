@@ -8,6 +8,46 @@ import (
 	"github.com/google/uuid"
 )
 
+// AccountActivityFilter represents the account activity filter enum.
+type AccountActivityFilter string
+
+const (
+	// ActiveAccountFilter represents active accounts filter value.
+	ActiveAccountFilter AccountActivityFilter = "A"
+	// InactiveAccountFilter represents inactive accounts filter value.
+	InactiveAccountFilter AccountActivityFilter = "I"
+	// NoActivityAccountFilter represents no account activity filter value.
+	NoActivityAccountFilter AccountActivityFilter = "N"
+)
+
+// ModuleName represents the modules' name enum in database.
+type ModuleName string
+
+const (
+	// AccountModule is the ISIS Account module name.
+	AccountModule ModuleName = "account"
+	// FinanceModule is the ISIS Finance module name.
+	FinanceModule ModuleName = "finance"
+	// DriveModule is the ISIS Drive module name.
+	DriveModule ModuleName = "drive"
+	// CalendarModule is the ISIS Calendar module name.
+	CalendarModule ModuleName = "calendar"
+	// AIModule is the ISIS AI module name.
+	AIModule ModuleName = "ai"
+)
+
+// GetAccountsFilters represents the filters for get all accounts query.
+type GetAccountsFilters struct {
+	// Limit is the result slice length limit.
+	Limit int `validate:"min=0"`
+	// Offset is the result offset. Offset < Limit (custom validation).
+	Offset int `validate:"min=0"`
+	// RoleID filter by user's role filter.
+	RoleID uuid.UUID `validate:"uuid"`
+	// IsActive filter by user activity.
+	IsActive AccountActivityFilter `validate:"oneof=A I N"`
+}
+
 // LoginAttemptConfig represents the parameters of a login attempt.
 type LoginAttemptConfig struct {
 	// AccountID is the account of the login attempt.
@@ -74,4 +114,38 @@ type LoginAttempt struct {
 	IPAddress net.IP `json:"ip_address" validate:"required,ip_with_localhost"`
 	// UserAgent is the client's user agent that attempted the login.
 	UserAgent string `json:"user_agent" validate:"required"`
+}
+
+// Module represents the module table row.
+type Module struct {
+	// ModuleID is the module's ID.
+	ModuleID uuid.UUID
+	// Name is the module's name.
+	Name string
+	// Description is the module's description.
+	Description string
+}
+
+// Role represents the role table row.
+type Role struct {
+	// RoleID is the role's ID.
+	RoleID uuid.UUID
+	// Name is the role's name.
+	Name string
+	// Description is the role's description.
+	Description string
+	// CreatedAt is the role's creation timestamp.
+	CreatedAt time.Time
+	// ModifiedAt is the role's last modification timestamp.
+	ModifiedAt time.Time
+}
+
+// RoleModule represents the role_module table row.
+type RoleModule struct {
+	// RoleID is the role's ID of the permission.
+	RoleID uuid.UUID
+	// ModuleID is the module's ID of the permission.
+	ModuleID uuid.UUID
+	// Elevated is a flag to check if the user has elevated permissions (admin).
+	Elevated bool
 }

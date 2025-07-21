@@ -11,10 +11,12 @@ var (
 	IncorrectCredentials    HTTPError = errors.New("Incorrect username or password")
 	DatabaseConnectionError HTTPError = errors.New("Could not connect to database")
 	InternalError           HTTPError = errors.New("Internal processing error")
-	AccountNotFound         HTTPError = errors.New("Account not found")
 	NotFound                HTTPError = errors.New("Resource not found")
 	SessionExpired          HTTPError = errors.New("Session expired")
 	NotImplemented          HTTPError = errors.New("Resource not implemented yet")
+	InvalidParameters       HTTPError = errors.New("Invalid parameters")
+	NoAccountsFound         HTTPError = errors.New("No accounts found")
+	AccountNotFound         HTTPError = errors.New("Account not found")
 )
 
 // AuthError is enum for authentication errors.
