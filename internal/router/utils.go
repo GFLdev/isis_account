@@ -4,6 +4,7 @@ import (
 	"isis_account/internal/router/queries"
 	"isis_account/internal/types"
 
+	"github.com/labstack/echo/v4"
 	"go.uber.org/zap"
 )
 
@@ -30,4 +31,40 @@ func newLoginAttempt(loginAttemptConfig types.LoginAttemptConfig) {
 		zap.String("ip_address", loginAttempt.IPAddress.String()),
 		zap.String("user_agent", loginAttempt.UserAgent),
 	)
+}
+
+// getClaimsDataWrapper is a wrapper to get JWT claims data from echo.Context.
+func getClaimsDataWrapper(c echo.Context) (*ClaimsData, error) {
+	// Get token
+	token, err := GetToken(c)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get claims from token
+	claims, err := GetClaims(c, token)
+	if err != nil {
+		return nil, err
+	}
+	return &claims.ClaimsData, nil
+}
+
+// elevationFromJWT is a wrapper to get role module elevation data from
+// echo.Context JWT.
+func elevationFromJWT(c echo.Context) (bool, error) {
+	// Get claims data from JWT
+	claimsData, err := getClaimsDataWrapper(c)
+	if err != nil {
+		return false, err
+	}
+
+	// Check elevation
+	roleModule, err := queries.GetRoleModuleByRole(
+		claimsData.RoleID,
+		types.AccountModule,
+	)
+	if err != nil {
+		return false, err
+	}
+	return roleModule.Elevated, nil
 }

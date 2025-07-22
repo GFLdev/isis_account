@@ -17,6 +17,8 @@ var (
 	InvalidParameters       HTTPError = errors.New("Invalid parameters")
 	NoAccountsFound         HTTPError = errors.New("No accounts found")
 	AccountNotFound         HTTPError = errors.New("Account not found")
+	RoleModuleNotExists     HTTPError = errors.New("Role does not have access to module")
+	RoleModuleNotElevated   HTTPError = errors.New("Role is not elevated for given module")
 )
 
 // AuthError is enum for authentication errors.

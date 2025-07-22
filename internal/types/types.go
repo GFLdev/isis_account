@@ -118,10 +118,8 @@ type LoginAttempt struct {
 
 // Module represents the module table row.
 type Module struct {
-	// ModuleID is the module's ID.
-	ModuleID uuid.UUID
-	// Name is the module's name.
-	Name string
+	// ModuleName is the module's name.
+	ModuleName ModuleName
 	// Description is the module's description.
 	Description string
 }
@@ -144,8 +142,8 @@ type Role struct {
 type RoleModule struct {
 	// RoleID is the role's ID of the permission.
 	RoleID uuid.UUID
-	// ModuleID is the module's ID of the permission.
-	ModuleID uuid.UUID
+	// ModuleName is the module's name of the permission.
+	ModuleName ModuleName
 	// Elevated is a flag to check if the user has elevated permissions (admin).
 	Elevated bool
 }

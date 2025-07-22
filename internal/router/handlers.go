@@ -218,7 +218,8 @@ func AuthRefreshHandler(c echo.Context) error {
 
 		// Get account's refresh token
 		refreshToken, err := queries.GetRefreshTokenByAccount(claims.AccountID)
-		if err == sql.ErrNoRows || refreshToken.ExpirationDate.Compare(ts) < 1 {
+		if errors.As(err, &sql.ErrNoRows) ||
+			refreshToken.ExpirationDate.Compare(ts) < 1 {
 			newLoginAttempt(loginAttemptConfig)
 			return c.JSON(
 				http.StatusUnauthorized,
@@ -393,10 +394,41 @@ func GetAccountsHandler(c echo.Context) error {
 	// Headers
 	c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 
-	// TODO: Check elevation
+	// Get elevation for account module
+	elevated, err := elevationFromJWT(c)
+	if err != nil {
+		switch {
+		case errors.As(err, &types.TokenError):
+			c.JSON(
+				http.StatusUnauthorized,
+				types.HTTPMessageResponse{Message: types.TokenError.Error()},
+			)
+		case errors.As(err, &types.ClaimsError):
+		case errors.As(err, &types.ParseTokenError):
+			c.JSON(
+				http.StatusInternalServerError,
+				types.HTTPMessageResponse{Message: types.ParsingError.Error()},
+			)
+		case errors.As(err, &sql.ErrNoRows):
+			return c.JSON(
+				http.StatusUnauthorized,
+				types.HTTPMessageResponse{Message: types.RoleModuleNotExists.Error()},
+			)
+		default:
+			c.JSON(
+				http.StatusInternalServerError,
+				types.HTTPMessageResponse{Message: types.InternalError.Error()},
+			)
+		}
+		return err
+	} else if !elevated {
+		return c.JSON(
+			http.StatusUnauthorized,
+			types.HTTPMessageResponse{Message: types.RoleModuleNotElevated.Error()},
+		)
+	}
 
 	// Get query params and validate them
-	var err error
 	filters := types.GetAccountsFilters{}
 	qLimit := c.QueryParam("limit")
 	if qLimit != "" {

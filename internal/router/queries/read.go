@@ -2,13 +2,25 @@ package queries
 
 import (
 	"database/sql"
+	"errors"
 	"isis_account/internal/database"
 	"isis_account/internal/types"
 	"isis_account/internal/utils"
 	"strconv"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 )
+
+// closeRows close *sql.Rows to prevent further enumeration. Used in defer.
+func closeRows(rows *sql.Rows) {
+	err := rows.Close()
+	if err != nil {
+		zap.L().Warn("Could not close query rows",
+			zap.Error(err),
+		)
+	}
+}
 
 // GetAllAcounts gets all accounts, with filters.
 func GetAllAcounts(filters types.GetAccountsFilters) ([]*types.Account, error) {
@@ -59,9 +71,9 @@ func GetAllAcounts(filters types.GetAccountsFilters) ([]*types.Account, error) {
 	accs := []*types.Account{}
 	rows, err := db.Query(query, args...)
 	if err != nil {
-		println("\n" + err.Error() + "\n")
 		return nil, err
 	}
+	defer closeRows(rows)
 	for rows.Next() {
 		acc := new(types.Account)
 		err = rows.Scan(
@@ -78,11 +90,13 @@ func GetAllAcounts(filters types.GetAccountsFilters) ([]*types.Account, error) {
 			&acc.CreatedAt,
 			&acc.ModifiedAt,
 		)
-		if err != nil {
+		if errors.As(err, &sql.ErrNoRows) {
+			return nil, nil // returns no data and no error, if it does not exist
+		} else if err != nil {
 			return nil, err
 		}
 
-		// Validate account and append
+		// Validate account structure and append it, if it passes
 		err = utils.ValidateStruct(acc)
 		if err != nil {
 			return nil, err
@@ -122,7 +136,7 @@ func GetAccountByID(accountID uuid.UUID) (*types.Account, error) {
 		&acc.CreatedAt,
 		&acc.ModifiedAt,
 	)
-	if err == sql.ErrNoRows {
+	if errors.As(err, &sql.ErrNoRows) {
 		return nil, nil // returns no data and no error, if it does not exist
 	} else if err != nil {
 		return nil, err
@@ -165,7 +179,7 @@ func GetAccountByUsername(username string) (*types.Account, error) {
 		&acc.CreatedAt,
 		&acc.ModifiedAt,
 	)
-	if err == sql.ErrNoRows {
+	if errors.As(err, &sql.ErrNoRows) {
 		return nil, nil // returns no data and no error, if it does not exist
 	} else if err != nil {
 		return nil, err
@@ -198,16 +212,374 @@ func GetRefreshTokenByAccount(accoundID uuid.UUID) (*types.RefreshToken, error) 
 		&refreshToken.AccountID,
 		&refreshToken.ExpirationDate,
 	)
-	if err == sql.ErrNoRows {
+	if errors.As(err, &sql.ErrNoRows) {
 		return nil, nil // returns no data and no error, if it does not exist
 	} else if err != nil {
 		return nil, err
 	}
 
-	// Validate the account structure and return, if it passes
+	// Validate the refresh token structure and return, if it passes
 	err = utils.ValidateStruct(refreshToken)
 	if err != nil {
 		return nil, err
 	}
 	return refreshToken, nil
+}
+
+// GetAllRoles gets all roles from database.
+func GetAllRoles() ([]*types.Role, error) {
+	// Get database instance
+	db, err := database.GetInstance()
+	if err != nil {
+		return nil, err
+	}
+
+	// Query all roles and copy data
+	roles := []*types.Role{}
+	rows, err := db.Query(
+		`SELECT *
+    FROM account.role;`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer closeRows(rows)
+	for rows.Next() {
+		role := new(types.Role)
+		err = rows.Scan(
+			&role.RoleID,
+			&role.Name,
+			&role.Description,
+			&role.CreatedAt,
+			&role.ModifiedAt,
+		)
+		if errors.As(err, &sql.ErrNoRows) {
+			return nil, nil // returns no data and no error, if it does not exist
+		} else if err != nil {
+			return nil, err
+		}
+
+		// Validate role structure and append it, if it passes
+		err = utils.ValidateStruct(role)
+		if err != nil {
+			return nil, err
+		}
+		roles = append(roles, role)
+	}
+	return roles, nil
+}
+
+// GetRoleByID gets one role by its ID.
+func GetRoleByID(roleID uuid.UUID) (*types.Role, error) {
+	// Get database instance
+	db, err := database.GetInstance()
+	if err != nil {
+		return nil, err
+	}
+
+	// Get role by ID and copy its data
+	role := new(types.Role)
+	err = db.QueryRow(
+		`SELECT *
+    FROM account.role
+    WHERE role.role_id = $1;`,
+		roleID,
+	).Scan(
+		&role.RoleID,
+		&role.Name,
+		&role.Description,
+		&role.CreatedAt,
+		&role.ModifiedAt,
+	)
+	if errors.As(err, &sql.ErrNoRows) {
+		return nil, nil // returns no data and no error, if it does not exist
+	} else if err != nil {
+		return nil, err
+	}
+
+	// Validate role structure and return it, if it passes
+	err = utils.ValidateStruct(role)
+	if err != nil {
+		return nil, err
+	}
+	return role, nil
+}
+
+// GetModulesName gets all module_name enum values from database.
+func GetModulesName() ([]string, error) {
+	// Get database instance
+	db, err := database.GetInstance()
+	if err != nil {
+		return nil, err
+	}
+
+	// Query all module_name enum values in database
+	modulesName := []string{}
+	rows, err := db.Query(
+		`SELECT unnest(enum_range(NULL::account.module_name))::text;`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer closeRows(rows)
+	for rows.Next() {
+		var moduleName string
+		err = rows.Scan(&moduleName)
+		if errors.As(err, &sql.ErrNoRows) {
+			return nil, nil // returns no data and no error, if it does not exist
+		} else if err != nil {
+			return nil, err
+		}
+		modulesName = append(modulesName, moduleName)
+	}
+	return modulesName, nil
+}
+
+// GetAllModules gets all modules from database;
+func GetAllModules() ([]*types.Module, error) {
+	// Get database instance
+	db, err := database.GetInstance()
+	if err != nil {
+		return nil, err
+	}
+
+	// Get all modules and copy its data
+	modules := []*types.Module{}
+	rows, err := db.Query(
+		`SELECT *
+    FROM account.module;`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer closeRows(rows)
+	for rows.Next() {
+		module := new(types.Module)
+		err = rows.Scan(
+			&module.ModuleName,
+			&module.Description,
+		)
+		if errors.As(err, &sql.ErrNoRows) {
+			return nil, nil // returns no data and no error, if it does not exist
+		} else if err != nil {
+			return nil, err
+		}
+
+		// Validate module structure and append it, if it passes
+		err = utils.ValidateStruct(module)
+		if err != nil {
+			return nil, err
+		}
+		modules = append(modules, module)
+	}
+	return modules, nil
+}
+
+// GetModuleByName gets one module by its name.
+func GetModuleByName(name types.ModuleName) (*types.Module, error) {
+	// Get database instance
+	db, err := database.GetInstance()
+	if err != nil {
+		return nil, err
+	}
+
+	// Get module from database and copy its data
+	module := new(types.Module)
+	err = db.QueryRow(
+		`SELECT *
+    FROM account.module
+    WHERE module.module_name = $1;`,
+		name,
+	).Scan(
+		&module.ModuleName,
+		&module.Description,
+	)
+	if errors.As(err, &sql.ErrNoRows) {
+		return nil, nil // returns no data and no error, if it does not exist
+	} else if err != nil {
+		return nil, err
+	}
+
+	// Validate module structure and return it, if it passes
+	err = utils.ValidateStruct(module)
+	if err != nil {
+		return nil, err
+	}
+	return module, nil
+}
+
+// GetAllRoleModuleByRole gets all role module permissions by role ID.
+func GetAllRoleModuleByRole(roleID uuid.UUID) ([]*types.RoleModule, error) {
+	// Get database instance
+	db, err := database.GetInstance()
+	if err != nil {
+		return nil, err
+	}
+
+	// Get role module from database and copy its data
+	roleModules := []*types.RoleModule{}
+	rows, err := db.Query(
+		`SELECT *
+    FROM account.role_module
+    WHERE role_module.rode_id = $1;`,
+		roleID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer closeRows(rows)
+	for rows.Next() {
+		roleModule := new(types.RoleModule)
+		err = rows.Scan(
+			&roleModule.RoleID,
+			&roleModule.ModuleName,
+			&roleModule.Elevated,
+		)
+		if errors.As(err, &sql.ErrNoRows) {
+			return nil, nil // returns no data and no error, if it does not exist
+		} else if err != nil {
+			return nil, err
+		}
+
+		// Validate role_module structure and append it, if it passes
+		err = utils.ValidateStruct(roleModule)
+		if err != nil {
+			return nil, err
+		}
+		roleModules = append(roleModules, roleModule)
+	}
+	return roleModules, nil
+}
+
+// GetRoleModuleByRole gets the role module permission by role ID and
+// module name.
+func GetRoleModuleByRole(
+	roleID uuid.UUID,
+	moduleName types.ModuleName,
+) (*types.RoleModule, error) {
+	// Get database instance
+	db, err := database.GetInstance()
+	if err != nil {
+		return nil, err
+	}
+
+	// Get role module from database and copy its data
+	roleModule := new(types.RoleModule)
+	err = db.QueryRow(
+		`SELECT *
+    FROM account.role_module
+    WHERE role_module.role_id = $1
+    AND role_module.module_name = $2;`,
+		roleID,
+		moduleName,
+	).Scan(
+		&roleModule.RoleID,
+		&roleModule.ModuleName,
+		&roleModule.Elevated,
+	)
+	if errors.As(err, &sql.ErrNoRows) {
+		return nil, nil // returns no data and no error, if it does not exist
+	} else if err != nil {
+		return nil, err
+	}
+
+	// Validate role_module structure and return it, if it passes
+	err = utils.ValidateStruct(roleModule)
+	if err != nil {
+		return nil, err
+	}
+	return roleModule, nil
+}
+
+// GetAllRoleModuleByAccount gets all role module permissions by account ID.
+func GetAllRoleModuleByAccount(
+	accountID uuid.UUID,
+) ([]*types.RoleModule, error) {
+	// Get database instance
+	db, err := database.GetInstance()
+	if err != nil {
+		return nil, err
+	}
+
+	// Get role module from database and copy its data
+	roleModules := []*types.RoleModule{}
+	rows, err := db.Query(
+		`SELECT role_module.role_id
+          , role_module.module_name
+          , role_module.elevated
+    FROM account.role_module
+    INNER JOIN account.account
+      ON account.account_id = $1
+      AND account.role_id = role_module.role_id;`,
+		accountID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer closeRows(rows)
+	for rows.Next() {
+		roleModule := new(types.RoleModule)
+		err = rows.Scan(
+			&roleModule.RoleID,
+			&roleModule.ModuleName,
+			&roleModule.Elevated,
+		)
+		if errors.As(err, &sql.ErrNoRows) {
+			return nil, nil // returns no data and no error, if it does not exist
+		} else if err != nil {
+			return nil, err
+		}
+
+		// Validate role_module structure and append it, if it passes
+		err = utils.ValidateStruct(roleModule)
+		if err != nil {
+			return nil, err
+		}
+		roleModules = append(roleModules, roleModule)
+	}
+	return roleModules, nil
+}
+
+// GetRoleModuleByAccount gets the role module permission by account ID and
+// module name.
+func GetRoleModuleByAccount(
+	accountID uuid.UUID,
+	moduleName types.ModuleName,
+) (*types.RoleModule, error) {
+	// Get database instance
+	db, err := database.GetInstance()
+	if err != nil {
+		return nil, err
+	}
+
+	// Get role module from database and copy its data
+	roleModule := new(types.RoleModule)
+	err = db.QueryRow(
+		`SELECT role_module.role_id
+          , role_module.module_name
+          , role_module.elevated
+    FROM account.role_module
+    INNER JOIN account.account
+      ON account.account_id = $1
+      AND account.role_id = role_module.role_id
+    WHERE role_module.module_name = $2;`,
+		accountID,
+		moduleName,
+	).Scan(
+		&roleModule.RoleID,
+		&roleModule.ModuleName,
+		&roleModule.Elevated,
+	)
+	if errors.As(err, &sql.ErrNoRows) {
+		return nil, nil // returns no data and no error, if it does not exist
+	} else if err != nil {
+		return nil, err
+	}
+
+	// Validate role_module structure and return it, if it passes
+	err = utils.ValidateStruct(roleModule)
+	if err != nil {
+		return nil, err
+	}
+	return roleModule, nil
 }
