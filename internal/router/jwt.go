@@ -1,7 +1,9 @@
 package router
 
 import (
+	"errors"
 	"isis_account/internal/config"
+	"isis_account/internal/router/queries"
 	"isis_account/internal/types"
 	"net/http"
 	"time"
@@ -77,7 +79,34 @@ func GetClaims(c echo.Context, token *jwt.Token) (*JWTClaims, error) {
 	if !ok {
 		return nil, types.ClaimsError
 	}
+
+	// Validate data
+	ok, err := queries.CheckAccountWithRole(
+		claims.ClaimsData.AccountID,
+		claims.ClaimsData.RoleID,
+	)
+	if err != nil {
+		return nil, err
+	} else if !ok {
+		return nil, types.InvalidClaimsData
+	}
 	return claims, nil
+}
+
+// GetClaimsData is a wrapper to get JWT claims data from echo.Context.
+func GetClaimsData(c echo.Context) (*ClaimsData, error) {
+	// Get token
+	token, err := GetToken(c)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get claims from token
+	claims, err := GetClaims(c, token)
+	if err != nil {
+		return nil, err
+	}
+	return &claims.ClaimsData, nil
 }
 
 func GenerateToken(claims JWTClaims) (string, error) {
@@ -91,21 +120,51 @@ func GenerateToken(claims JWTClaims) (string, error) {
 }
 
 func AuthErrorHandler(c echo.Context, err error) error {
-	switch err {
-	case echojwt.ErrJWTMissing:
-		return c.JSON(
+	switch {
+	case errors.As(err, &echojwt.ErrJWTMissing):
+		c.JSON(
 			http.StatusUnauthorized,
 			types.HTTPMessageResponse{Message: types.TokenError.Error()},
 		)
-	case echojwt.ErrJWTInvalid:
-		return c.JSON(
+	case errors.As(err, &echojwt.ErrJWTInvalid):
+		c.JSON(
 			http.StatusUnauthorized,
 			types.HTTPMessageResponse{Message: types.ParseTokenError.Error()},
 		)
 	default:
-		return c.JSON(
-			http.StatusUnauthorized,
+		c.JSON(
+			http.StatusInternalServerError,
 			types.HTTPMessageResponse{Message: types.AuthFailedError.Error()},
 		)
 	}
+	return err
+}
+
+// TokenErrorHandler handles the error returned from token related getter
+// functions, sending a coherent JSON response for each possible error.
+func TokenErrorHandler(c echo.Context, err error) error {
+	switch {
+	case errors.As(err, &types.TokenError):
+		c.JSON(
+			http.StatusUnauthorized,
+			types.HTTPMessageResponse{Message: types.TokenError.Error()},
+		)
+	case errors.As(err, &types.ClaimsError):
+	case errors.As(err, &types.ParseTokenError):
+		c.JSON(
+			http.StatusInternalServerError,
+			types.HTTPMessageResponse{Message: types.ParsingError.Error()},
+		)
+	case errors.As(err, &types.InvalidClaimsData):
+		c.JSON(
+			http.StatusUnauthorized,
+			types.HTTPMessageResponse{Message: types.InvalidClaimsData.Error()},
+		)
+	default:
+		c.JSON(
+			http.StatusInternalServerError,
+			types.HTTPMessageResponse{Message: types.AuthFailedError.Error()},
+		)
+	}
+	return err
 }

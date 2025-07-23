@@ -24,7 +24,8 @@ func AuthLoginHandler(c echo.Context) error {
 	c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 
 	// Read and parse body
-	body, err := utils.JSONToStruct[types.HTTPAuthLoginReq](c.Request().Body, false)
+	body := c.Request().Body
+	data, err := utils.JSONToStruct[types.HTTPLoginForm](body, false)
 	if err != nil {
 		c.JSON(
 			http.StatusInternalServerError,
@@ -44,14 +45,14 @@ func AuthLoginHandler(c echo.Context) error {
 	}
 
 	// Get password hash from database
-	acc, err := queries.GetAccountByUsername(body.Username)
+	acc, err := queries.GetAccountByUsername(data.Username)
 	if err != nil {
 		c.JSON(
 			http.StatusInternalServerError,
 			types.HTTPMessageResponse{Message: types.InternalError.Error()},
 		)
 		return err
-	} else if acc == nil {
+	} else if acc == nil || !acc.IsActive {
 		return c.JSON(
 			http.StatusNotFound,
 			types.HTTPMessageResponse{Message: types.AccountNotFound.Error()},
@@ -69,7 +70,7 @@ func AuthLoginHandler(c echo.Context) error {
 	}
 
 	// Compare
-	err = bcrypt.CompareHashAndPassword(acc.Password, []byte(body.Password))
+	err = bcrypt.CompareHashAndPassword(acc.Password, []byte(data.Password))
 	if err != nil {
 		newLoginAttempt(loginAttemptConfig)
 		c.JSON(
@@ -116,9 +117,9 @@ func AuthLoginHandler(c echo.Context) error {
 	}
 
 	// Response
-	res := types.HTTPAuthLoginRes{
+	res := types.HTTPLoginResponse{
 		AccountID: acc.AccountID,
-		RoleId:    acc.RoleID,
+		RoleID:    acc.RoleID,
 	}
 	err = utils.ValidateStruct(res)
 	if err != nil {
@@ -169,29 +170,14 @@ func AuthRefreshHandler(c echo.Context) error {
 
 	// Get token
 	token, err := GetToken(c)
-	if errors.As(err, &types.TokenError) {
-		// mask endpoint with 404 if there is no token
-		c.JSON(
-			http.StatusNotFound,
-			types.HTTPMessageResponse{Message: types.NotFound.Error()},
-		)
-		return err
-	} else if errors.As(err, &types.ParseTokenError) {
-		c.JSON(
-			http.StatusInternalServerError,
-			types.HTTPMessageResponse{Message: types.ParsingError.Error()},
-		)
-		return err
+	if err != nil {
+		return TokenErrorHandler(c, err)
 	}
 
 	// Get claims from token
 	claims, err := GetClaims(c, token)
-	if errors.As(err, &types.ClaimsError) {
-		c.JSON(
-			http.StatusInternalServerError,
-			types.HTTPMessageResponse{Message: types.ParsingError.Error()},
-		)
-		return err
+	if err != nil {
+		return TokenErrorHandler(c, err)
 	}
 
 	// New login attempt
@@ -283,9 +269,9 @@ func AuthRefreshHandler(c echo.Context) error {
 	}
 
 	// Response
-	res := types.HTTPAuthLoginRes{
+	res := types.HTTPLoginResponse{
 		AccountID: newClaims.AccountID,
-		RoleId:    newClaims.RoleID,
+		RoleID:    newClaims.RoleID,
 	}
 	err = utils.ValidateStruct(res)
 	if err != nil {
@@ -394,38 +380,16 @@ func GetAccountsHandler(c echo.Context) error {
 	// Headers
 	c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 
-	// Get elevation for account module
-	elevated, err := elevationFromJWT(c)
+	// Get claims data
+	claimsData, err := GetClaimsData(c)
 	if err != nil {
-		switch {
-		case errors.As(err, &types.TokenError):
-			c.JSON(
-				http.StatusUnauthorized,
-				types.HTTPMessageResponse{Message: types.TokenError.Error()},
-			)
-		case errors.As(err, &types.ClaimsError):
-		case errors.As(err, &types.ParseTokenError):
-			c.JSON(
-				http.StatusInternalServerError,
-				types.HTTPMessageResponse{Message: types.ParsingError.Error()},
-			)
-		case errors.As(err, &sql.ErrNoRows):
-			return c.JSON(
-				http.StatusUnauthorized,
-				types.HTTPMessageResponse{Message: types.RoleModuleNotExists.Error()},
-			)
-		default:
-			c.JSON(
-				http.StatusInternalServerError,
-				types.HTTPMessageResponse{Message: types.InternalError.Error()},
-			)
-		}
-		return err
-	} else if !elevated {
-		return c.JSON(
-			http.StatusUnauthorized,
-			types.HTTPMessageResponse{Message: types.RoleModuleNotElevated.Error()},
-		)
+		return TokenErrorHandler(c, err)
+	}
+
+	// Get elevation for account module
+	elevated, err := GetElevation(c, claimsData, types.AccountModule)
+	if err != nil {
+		return ElevationErrorHandler(c, elevated, err)
 	}
 
 	// Get query params and validate them
@@ -487,12 +451,12 @@ func GetAccountsHandler(c echo.Context) error {
 		return err
 	}
 
-	// Query all accounts
+	// Get all accounts data
 	accs, err := queries.GetAllAcounts(filters)
 	if err != nil {
 		c.JSON(
 			http.StatusInternalServerError,
-			types.HTTPMessageResponse{Message: types.NoAccountsFound.Error()},
+			types.HTTPMessageResponse{Message: types.InternalError.Error()},
 		)
 		return err
 	} else if len(accs) == 0 {
@@ -506,22 +470,155 @@ func GetAccountsHandler(c echo.Context) error {
 
 // GetAccountHandler handles one account fetching.
 func GetAccountHandler(c echo.Context) error {
-	return c.JSON(
-		http.StatusNotImplemented,
-		types.HTTPMessageResponse{Message: types.NotImplemented.Error()},
-	)
+	// Headers
+	c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+
+	// Get URL param and validate it
+	accountIDParam := c.Param("id")
+	accountID, err := uuid.Parse(accountIDParam)
+	if err != nil {
+		c.JSON(
+			http.StatusBadRequest,
+			types.HTTPMessageResponse{Message: types.ParsingError.Error()},
+		)
+		return err
+	}
+
+	// Get claims data and check account
+	claimsData, err := GetClaimsData(c)
+	if err != nil {
+		return TokenErrorHandler(c, err)
+	} else if accountID != claimsData.AccountID {
+		// Get elevation for account module
+		elevated, err := GetElevation(c, claimsData, types.AccountModule)
+		if err != nil {
+			return ElevationErrorHandler(c, elevated, err)
+		}
+	}
+
+	// Get account data
+	account, err := queries.GetAccountByID(accountID)
+	if err != nil {
+		c.JSON(
+			http.StatusInternalServerError,
+			types.HTTPMessageResponse{Message: types.InternalError.Error()},
+		)
+		return err
+	} else if account == nil {
+		return c.JSON(
+			http.StatusNotFound,
+			types.HTTPMessageResponse{Message: types.AccountNotFound.Error()},
+		)
+	}
+	return c.JSON(http.StatusOK, account)
 }
 
 // CreateAccountHandler handles the creation of an account.
 func CreateAccountHandler(c echo.Context) error {
-	return c.JSON(
-		http.StatusNotImplemented,
-		types.HTTPMessageResponse{Message: types.NotImplemented.Error()},
-	)
+	// Headers
+	c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+
+	// Read and parse body
+	body := c.Request().Body
+	data, err := utils.JSONToStruct[types.HTTPNewAccountForm](body, false)
+	if err != nil {
+		c.JSON(
+			http.StatusInternalServerError,
+			types.HTTPMessageResponse{Message: types.ParsingError.Error()},
+		)
+		return err
+	}
+
+	// Validate body
+	err = utils.ValidateStruct(data)
+	if err != nil {
+		c.JSON(
+			http.StatusBadRequest,
+			types.HTTPMessageResponse{Message: types.InvalidNewAccountForm.Error()},
+		)
+		return err
+	}
+
+	// Get claims data
+	claimsData, err := GetClaimsData(c)
+	if err != nil {
+		return TokenErrorHandler(c, err)
+	}
+
+	// Get elevation for account module
+	elevated, err := GetElevation(c, claimsData, types.AccountModule)
+	if err != nil {
+		return ElevationErrorHandler(c, elevated, err)
+	}
+
+	// Check if username and role exists
+	ok, err := queries.CheckAccountByUsername(data.Username)
+	if err != nil {
+		c.JSON(
+			http.StatusInternalServerError,
+			types.HTTPMessageResponse{Message: types.InternalError.Error()},
+		)
+		return err
+	} else if ok {
+		return c.JSON(
+			http.StatusBadRequest,
+			types.HTTPMessageResponse{Message: types.UsernameTaken.Error()},
+		)
+	}
+	ok, err = queries.CheckRoleByID(data.RoleID)
+	if err != nil {
+		c.JSON(
+			http.StatusInternalServerError,
+			types.HTTPMessageResponse{Message: types.InternalError.Error()},
+		)
+		return err
+	} else if !ok {
+		return c.JSON(
+			http.StatusBadRequest,
+			types.HTTPMessageResponse{Message: types.RoleNotFound.Error()},
+		)
+	}
+
+	// Create new account
+	account, err := queries.CreateAccount(&data)
+	if err != nil {
+		c.JSON(
+			http.StatusInternalServerError,
+			types.HTTPMessageResponse{Message: types.InternalError.Error()},
+		)
+		return err
+	}
+	return c.JSON(http.StatusCreated, account)
 }
 
 // UpdateAccountHandler handles one account update.
 func UpdateAccountHandler(c echo.Context) error {
+	// Headers
+	c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+
+	// Get URL param and validate it
+	accountIDParam := c.Param("id")
+	accountID, err := uuid.Parse(accountIDParam)
+	if err != nil {
+		c.JSON(
+			http.StatusBadRequest,
+			types.HTTPMessageResponse{Message: types.ParsingError.Error()},
+		)
+		return err
+	}
+
+	// Get claims data and check account
+	claimsData, err := GetClaimsData(c)
+	if err != nil {
+		return TokenErrorHandler(c, err)
+	} else if accountID != claimsData.AccountID {
+		// Get elevation for account module
+		elevated, err := GetElevation(c, claimsData, types.AccountModule)
+		if err != nil {
+			return ElevationErrorHandler(c, elevated, err)
+		}
+	}
+
 	return c.JSON(
 		http.StatusNotImplemented,
 		types.HTTPMessageResponse{Message: types.NotImplemented.Error()},
@@ -530,6 +627,21 @@ func UpdateAccountHandler(c echo.Context) error {
 
 // DeleteAccountsHandler handles the deletion of all accounts.
 func DeleteAccountsHandler(c echo.Context) error {
+	// Headers
+	c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+
+	// Get claims data
+	claimsData, err := GetClaimsData(c)
+	if err != nil {
+		return TokenErrorHandler(c, err)
+	}
+
+	// Get elevation for account module
+	elevated, err := GetElevation(c, claimsData, types.AccountModule)
+	if err != nil {
+		return ElevationErrorHandler(c, elevated, err)
+	}
+
 	return c.JSON(
 		http.StatusNotImplemented,
 		types.HTTPMessageResponse{Message: types.NotImplemented.Error()},
@@ -538,6 +650,32 @@ func DeleteAccountsHandler(c echo.Context) error {
 
 // DeleteAccountHandler handles the deletion of one account.
 func DeleteAccountHandler(c echo.Context) error {
+	// Headers
+	c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+
+	// Get URL param and validate it
+	accountIDParam := c.Param("id")
+	accountID, err := uuid.Parse(accountIDParam)
+	if err != nil {
+		c.JSON(
+			http.StatusBadRequest,
+			types.HTTPMessageResponse{Message: types.ParsingError.Error()},
+		)
+		return err
+	}
+
+	// Get claims data and check account
+	claimsData, err := GetClaimsData(c)
+	if err != nil {
+		return TokenErrorHandler(c, err)
+	} else if accountID != claimsData.AccountID {
+		// Get elevation for account module
+		elevated, err := GetElevation(c, claimsData, types.AccountModule)
+		if err != nil {
+			return ElevationErrorHandler(c, elevated, err)
+		}
+	}
+
 	return c.JSON(
 		http.StatusNotImplemented,
 		types.HTTPMessageResponse{Message: types.NotImplemented.Error()},
@@ -546,22 +684,100 @@ func DeleteAccountHandler(c echo.Context) error {
 
 // GetRolesHandler handles all roles fetching.
 func GetRolesHandler(c echo.Context) error {
-	return c.JSON(
-		http.StatusNotImplemented,
-		types.HTTPMessageResponse{Message: types.NotImplemented.Error()},
-	)
+	// Headers
+	c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+
+	// Get claims data
+	claimsData, err := GetClaimsData(c)
+	if err != nil {
+		return TokenErrorHandler(c, err)
+	}
+
+	// Get elevation for account module
+	elevated, err := GetElevation(c, claimsData, types.AccountModule)
+	if err != nil {
+		return ElevationErrorHandler(c, elevated, err)
+	}
+
+	// Get all roles data
+	roles, err := queries.GetAllRoles()
+	if err != nil {
+		c.JSON(
+			http.StatusInternalServerError,
+			types.HTTPMessageResponse{Message: types.InternalError.Error()},
+		)
+		return err
+	} else if len(roles) == 0 {
+		return c.JSON(
+			http.StatusNoContent,
+			types.HTTPMessageResponse{Message: types.NoRolesFound.Error()},
+		)
+	}
+	return c.JSON(http.StatusOK, roles)
 }
 
 // GetRoleHandler handles one role fetching.
 func GetRoleHandler(c echo.Context) error {
-	return c.JSON(
-		http.StatusNotImplemented,
-		types.HTTPMessageResponse{Message: types.NotImplemented.Error()},
-	)
+	// Headers
+	c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+
+	// Get URL param and validate it
+	roleIDParam := c.Param("id")
+	roleID, err := uuid.Parse(roleIDParam)
+	if err != nil {
+		c.JSON(
+			http.StatusBadRequest,
+			types.HTTPMessageResponse{Message: types.ParsingError.Error()},
+		)
+		return err
+	}
+
+	// Get claims data and check role
+	claimsData, err := GetClaimsData(c)
+	if err != nil {
+		return TokenErrorHandler(c, err)
+	} else if roleID != claimsData.RoleID {
+		// Get elevation for account module
+		elevated, err := GetElevation(c, claimsData, types.AccountModule)
+		if err != nil {
+			return ElevationErrorHandler(c, elevated, err)
+		}
+	}
+
+	// Get role data
+	role, err := queries.GetRoleByID(roleID)
+	if err != nil {
+		c.JSON(
+			http.StatusInternalServerError,
+			types.HTTPMessageResponse{Message: types.InternalError.Error()},
+		)
+		return err
+	} else if role == nil {
+		return c.JSON(
+			http.StatusNoContent,
+			types.HTTPMessageResponse{Message: types.RoleNotFound.Error()},
+		)
+	}
+	return c.JSON(http.StatusOK, role)
 }
 
 // CreateRoleHandler handles the creation of a role.
 func CreateRoleHandler(c echo.Context) error {
+	// Headers
+	c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+
+	// Get claims data
+	claimsData, err := GetClaimsData(c)
+	if err != nil {
+		return TokenErrorHandler(c, err)
+	}
+
+	// Get elevation for account module
+	elevated, err := GetElevation(c, claimsData, types.AccountModule)
+	if err != nil {
+		return ElevationErrorHandler(c, elevated, err)
+	}
+
 	return c.JSON(
 		http.StatusNotImplemented,
 		types.HTTPMessageResponse{Message: types.NotImplemented.Error()},
@@ -570,6 +786,21 @@ func CreateRoleHandler(c echo.Context) error {
 
 // UpdateRoleHandler handles one role update.
 func UpdateRoleHandler(c echo.Context) error {
+	// Headers
+	c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+
+	// Get claims data
+	claimsData, err := GetClaimsData(c)
+	if err != nil {
+		return TokenErrorHandler(c, err)
+	}
+
+	// Get elevation for account module
+	elevated, err := GetElevation(c, claimsData, types.AccountModule)
+	if err != nil {
+		return ElevationErrorHandler(c, elevated, err)
+	}
+
 	return c.JSON(
 		http.StatusNotImplemented,
 		types.HTTPMessageResponse{Message: types.NotImplemented.Error()},
@@ -578,6 +809,21 @@ func UpdateRoleHandler(c echo.Context) error {
 
 // DeleteRolesHandler handles the deletion of all roles.
 func DeleteRolesHandler(c echo.Context) error {
+	// Headers
+	c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+
+	// Get claims data
+	claimsData, err := GetClaimsData(c)
+	if err != nil {
+		return TokenErrorHandler(c, err)
+	}
+
+	// Get elevation for account module
+	elevated, err := GetElevation(c, claimsData, types.AccountModule)
+	if err != nil {
+		return ElevationErrorHandler(c, elevated, err)
+	}
+
 	return c.JSON(
 		http.StatusNotImplemented,
 		types.HTTPMessageResponse{Message: types.NotImplemented.Error()},
@@ -586,6 +832,21 @@ func DeleteRolesHandler(c echo.Context) error {
 
 // DeleteRoleHandler handles the deletion of one role.
 func DeleteRoleHandler(c echo.Context) error {
+	// Headers
+	c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+
+	// Get claims data
+	claimsData, err := GetClaimsData(c)
+	if err != nil {
+		return TokenErrorHandler(c, err)
+	}
+
+	// Get elevation for account module
+	elevated, err := GetElevation(c, claimsData, types.AccountModule)
+	if err != nil {
+		return ElevationErrorHandler(c, elevated, err)
+	}
+
 	return c.JSON(
 		http.StatusNotImplemented,
 		types.HTTPMessageResponse{Message: types.NotImplemented.Error()},
@@ -594,6 +855,21 @@ func DeleteRoleHandler(c echo.Context) error {
 
 // GetLogs handles all logs fetching.
 func GetLogs(c echo.Context) error {
+	// Headers
+	c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+
+	// Get claims data
+	claimsData, err := GetClaimsData(c)
+	if err != nil {
+		return TokenErrorHandler(c, err)
+	}
+
+	// Get elevation for account module
+	elevated, err := GetElevation(c, claimsData, types.AccountModule)
+	if err != nil {
+		return ElevationErrorHandler(c, elevated, err)
+	}
+
 	return c.JSON(
 		http.StatusNotImplemented,
 		types.HTTPMessageResponse{Message: types.NotImplemented.Error()},
@@ -602,6 +878,21 @@ func GetLogs(c echo.Context) error {
 
 // GetLoginLogs handles all login attempt logs fetching.
 func GetLoginLogs(c echo.Context) error {
+	// Headers
+	c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+
+	// Get claims data
+	claimsData, err := GetClaimsData(c)
+	if err != nil {
+		return TokenErrorHandler(c, err)
+	}
+
+	// Get elevation for account module
+	elevated, err := GetElevation(c, claimsData, types.AccountModule)
+	if err != nil {
+		return ElevationErrorHandler(c, elevated, err)
+	}
+
 	return c.JSON(
 		http.StatusNotImplemented,
 		types.HTTPMessageResponse{Message: types.NotImplemented.Error()},

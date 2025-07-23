@@ -16,7 +16,7 @@ import (
 
 const (
 	App     = "ISIS Account"
-	Version = 0.1
+	Version = 0.2
 )
 
 func init() {

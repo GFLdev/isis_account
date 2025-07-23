@@ -3,6 +3,7 @@ package router
 import (
 	"isis_account/internal/router/queries"
 	"isis_account/internal/types"
+	"net/http"
 
 	"github.com/labstack/echo/v4"
 	"go.uber.org/zap"
@@ -33,38 +34,38 @@ func newLoginAttempt(loginAttemptConfig types.LoginAttemptConfig) {
 	)
 }
 
-// getClaimsDataWrapper is a wrapper to get JWT claims data from echo.Context.
-func getClaimsDataWrapper(c echo.Context) (*ClaimsData, error) {
-	// Get token
-	token, err := GetToken(c)
-	if err != nil {
-		return nil, err
-	}
-
-	// Get claims from token
-	claims, err := GetClaims(c, token)
-	if err != nil {
-		return nil, err
-	}
-	return &claims.ClaimsData, nil
-}
-
-// elevationFromJWT is a wrapper to get role module elevation data from
+// GetElevation is a wrapper to get role module elevation data from
 // echo.Context JWT.
-func elevationFromJWT(c echo.Context) (bool, error) {
-	// Get claims data from JWT
-	claimsData, err := getClaimsDataWrapper(c)
-	if err != nil {
-		return false, err
-	}
-
+func GetElevation(
+	c echo.Context,
+	claimsData *ClaimsData,
+	module types.ModuleName,
+) (bool, error) {
 	// Check elevation
-	roleModule, err := queries.GetRoleModuleByRole(
-		claimsData.RoleID,
-		types.AccountModule,
-	)
+	roleModule, err := queries.GetRoleModuleByRole(claimsData.RoleID, module)
 	if err != nil {
 		return false, err
+	} else if roleModule == nil {
+		return false, nil
 	}
 	return roleModule.Elevated, nil
+}
+
+// ElevationErrorHandler handles the error returned from elevationFromJWT,
+// sending a coherent JSON response for each possible error.
+func ElevationErrorHandler(
+	c echo.Context,
+	elevated bool,
+	err error,
+) error {
+	err = TokenErrorHandler(c, err)
+	if err != nil {
+		return err
+	} else if !elevated {
+		c.JSON(
+			http.StatusUnauthorized,
+			types.HTTPMessageResponse{Message: types.RoleNotElevated.Error()},
+		)
+	}
+	return err
 }

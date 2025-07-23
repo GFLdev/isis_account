@@ -1,7 +1,6 @@
 package types
 
 import (
-	"database/sql"
 	"net"
 	"time"
 
@@ -83,11 +82,11 @@ type Account struct {
 	// LoginCount is the account's login count.
 	LoginCount int `json:"login_count" validate:"number,min=0"`
 	// LastLoginAt is the account's last login date.
-	LastLoginAt sql.NullTime `json:"last_login_at"`
+	LastLoginAt time.Time `json:"last_login_at"`
 	// CreatedAt is the account's creation date.
 	CreatedAt time.Time `json:"created_at" validate:"required"`
 	// ModifiedAt is the account's last modification date.
-	ModifiedAt sql.NullTime `json:"modified_at"`
+	ModifiedAt time.Time `json:"modified_at"`
 }
 
 // RefreshToken represents the refresh_token table row.
@@ -109,7 +108,7 @@ type LoginAttempt struct {
 	// AttemptedAt is the timestamp of the attempt.
 	AttemptedAt time.Time `json:"attempted_at" validate:"required"`
 	// Success is the attempt success status.
-	Success bool `json:"success" validate:"boolean"`
+	Success bool `json:"success" validate:"required,boolean"`
 	// IPAddress is the client's IP address that attempted the login.
 	IPAddress net.IP `json:"ip_address" validate:"required,ip_with_localhost"`
 	// UserAgent is the client's user agent that attempted the login.
@@ -127,15 +126,15 @@ type Module struct {
 // Role represents the role table row.
 type Role struct {
 	// RoleID is the role's ID.
-	RoleID uuid.UUID
+	RoleID uuid.UUID `json:"role_id" validate:"required,uuid"`
 	// Name is the role's name.
-	Name string
+	Name string `json:"name" validate:"required,max=50"`
 	// Description is the role's description.
-	Description string
+	Description string `json:"description" validate:"required,max=1000"`
 	// CreatedAt is the role's creation timestamp.
-	CreatedAt time.Time
+	CreatedAt time.Time `json:"created_at"`
 	// ModifiedAt is the role's last modification timestamp.
-	ModifiedAt time.Time
+	ModifiedAt time.Time `json:"modified_at"`
 }
 
 // RoleModule represents the role_module table row.

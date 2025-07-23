@@ -2,9 +2,10 @@ package types
 
 import "errors"
 
-// HTTPError is the enum for HTTP error messages.
+// HTTPError is the enum for custom HTTP errors.
 type HTTPError error
 
+// HTTP custom error.
 var (
 	ParsingError            HTTPError = errors.New("Parsing Error")
 	InvalidAuthForm         HTTPError = errors.New("Invalid username or password")
@@ -17,16 +18,21 @@ var (
 	InvalidParameters       HTTPError = errors.New("Invalid parameters")
 	NoAccountsFound         HTTPError = errors.New("No accounts found")
 	AccountNotFound         HTTPError = errors.New("Account not found")
-	RoleModuleNotExists     HTTPError = errors.New("Role does not have access to module")
-	RoleModuleNotElevated   HTTPError = errors.New("Role is not elevated for given module")
+	UsernameTaken           HTTPError = errors.New("Username already taken")
+	InvalidNewAccountForm   HTTPError = errors.New("Invalid new account form")
+	NoRolesFound            HTTPError = errors.New("No roles found")
+	RoleNotFound            HTTPError = errors.New("Role not found")
+	RoleNotElevated         HTTPError = errors.New("Role is not elevated for given module")
 )
 
 // AuthError is enum for authentication errors.
 type AuthError error
 
+// Authentication error.
 var (
-	TokenError      AuthError = errors.New("Could not get token")
-	ParseTokenError AuthError = errors.New("Could not parse token")
-	ClaimsError     AuthError = errors.New("Could not parse token claims")
-	AuthFailedError AuthError = errors.New("Authentication failed")
+	TokenError        AuthError = errors.New("Could not get token")
+	ParseTokenError   AuthError = errors.New("Could not parse token")
+	ClaimsError       AuthError = errors.New("Could not parse token claims")
+	AuthFailedError   AuthError = errors.New("Authentication failed")
+	InvalidClaimsData AuthError = errors.New("Token data is not valid")
 )

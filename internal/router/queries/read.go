@@ -22,6 +22,83 @@ func closeRows(rows *sql.Rows) {
 	}
 }
 
+// CheckAccountWithRole check if the account, with given role, exists and is
+// active.
+func CheckAccountWithRole(accountID, roleID uuid.UUID) (bool, error) {
+	// Get database instance
+	db, err := database.GetInstance()
+	if err != nil {
+		return false, err
+	}
+
+	// Query one row and copy the data
+	var exists bool
+	err = db.QueryRow(
+		`SELECT EXISTS (
+      SELECT 1
+      FROM account.account
+      WHERE account.account_id = $1
+        AND account.role_id = $2
+        AND account.is_active = TRUE
+    );`,
+		accountID,
+		roleID,
+	).Scan(&exists)
+	if err != nil {
+		return false, err
+	}
+	return exists, nil
+}
+
+// CheckAccountByUsername check if an account, with the given username, exists.
+func CheckAccountByUsername(username string) (bool, error) {
+	// Get database instance
+	db, err := database.GetInstance()
+	if err != nil {
+		return false, err
+	}
+
+	// Query one row and copy the data
+	var exists bool
+	err = db.QueryRow(
+		`SELECT EXISTS (
+      SELECT 1
+      FROM account.account
+      WHERE account.username = $1
+        AND account.is_active = TRUE
+    );`,
+		username,
+	).Scan(&exists)
+	if err != nil {
+		return false, err
+	}
+	return exists, nil
+}
+
+// CheckRoleByID check if a role, with the given ID, exists.
+func CheckRoleByID(roleID uuid.UUID) (bool, error) {
+	// Get database instance
+	db, err := database.GetInstance()
+	if err != nil {
+		return false, err
+	}
+
+	// Query one row and copy the data
+	var exists bool
+	err = db.QueryRow(
+		`SELECT EXISTS (
+      SELECT 1
+      FROM account.role
+      WHERE role.role_id = $1
+    );`,
+		roleID,
+	).Scan(&exists)
+	if err != nil {
+		return false, err
+	}
+	return exists, nil
+}
+
 // GetAllAcounts gets all accounts, with filters.
 func GetAllAcounts(filters types.GetAccountsFilters) ([]*types.Account, error) {
 	// Get database instance
@@ -68,6 +145,7 @@ func GetAllAcounts(filters types.GetAccountsFilters) ([]*types.Account, error) {
 	args = append(args, filters.Offset)
 
 	// Query all rows and copy data
+	var lastLoginAt, modifiedAt sql.NullTime
 	accs := []*types.Account{}
 	rows, err := db.Query(query, args...)
 	if err != nil {
@@ -86,15 +164,19 @@ func GetAllAcounts(filters types.GetAccountsFilters) ([]*types.Account, error) {
 			&acc.Password,
 			&acc.IsActive,
 			&acc.LoginCount,
-			&acc.LastLoginAt,
+			&lastLoginAt,
 			&acc.CreatedAt,
-			&acc.ModifiedAt,
+			&modifiedAt,
 		)
 		if errors.As(err, &sql.ErrNoRows) {
 			return nil, nil // returns no data and no error, if it does not exist
 		} else if err != nil {
 			return nil, err
 		}
+
+		// Nullable dates
+		acc.LastLoginAt = lastLoginAt.Time
+		acc.ModifiedAt = modifiedAt.Time
 
 		// Validate account structure and append it, if it passes
 		err = utils.ValidateStruct(acc)
@@ -116,12 +198,13 @@ func GetAccountByID(accountID uuid.UUID) (*types.Account, error) {
 	}
 
 	// Query one row and copy the data
+	var lastLoginAt, modifiedAt sql.NullTime
 	acc := new(types.Account)
 	err = db.QueryRow(
 		`SELECT *
     FROM account.account
     WHERE account.account_id = $1;`,
-		accountID.String(),
+		accountID,
 	).Scan(
 		&acc.AccountID,
 		&acc.RoleID,
@@ -132,15 +215,19 @@ func GetAccountByID(accountID uuid.UUID) (*types.Account, error) {
 		&acc.Password,
 		&acc.IsActive,
 		&acc.LoginCount,
-		&acc.LastLoginAt,
+		&lastLoginAt,
 		&acc.CreatedAt,
-		&acc.ModifiedAt,
+		&modifiedAt,
 	)
 	if errors.As(err, &sql.ErrNoRows) {
 		return nil, nil // returns no data and no error, if it does not exist
 	} else if err != nil {
 		return nil, err
 	}
+
+	// Nullable dates
+	acc.LastLoginAt = lastLoginAt.Time
+	acc.ModifiedAt = modifiedAt.Time
 
 	// Validate the account structure and return, if it passes
 	err = utils.ValidateStruct(acc)
@@ -159,6 +246,7 @@ func GetAccountByUsername(username string) (*types.Account, error) {
 	}
 
 	// Query one row and copy the data
+	var lastLoginAt, modifiedAt sql.NullTime
 	acc := new(types.Account)
 	err = db.QueryRow(
 		`SELECT *
@@ -175,15 +263,19 @@ func GetAccountByUsername(username string) (*types.Account, error) {
 		&acc.Password,
 		&acc.IsActive,
 		&acc.LoginCount,
-		&acc.LastLoginAt,
+		&lastLoginAt,
 		&acc.CreatedAt,
-		&acc.ModifiedAt,
+		&modifiedAt,
 	)
 	if errors.As(err, &sql.ErrNoRows) {
 		return nil, nil // returns no data and no error, if it does not exist
 	} else if err != nil {
 		return nil, err
 	}
+
+	// Nullable dates
+	acc.LastLoginAt = lastLoginAt.Time
+	acc.ModifiedAt = modifiedAt.Time
 
 	// Validate the account structure and return, if it passes
 	err = utils.ValidateStruct(acc)
@@ -235,6 +327,7 @@ func GetAllRoles() ([]*types.Role, error) {
 	}
 
 	// Query all roles and copy data
+	var modifiedAt sql.NullTime
 	roles := []*types.Role{}
 	rows, err := db.Query(
 		`SELECT *
@@ -251,13 +344,16 @@ func GetAllRoles() ([]*types.Role, error) {
 			&role.Name,
 			&role.Description,
 			&role.CreatedAt,
-			&role.ModifiedAt,
+			&modifiedAt,
 		)
 		if errors.As(err, &sql.ErrNoRows) {
 			return nil, nil // returns no data and no error, if it does not exist
 		} else if err != nil {
 			return nil, err
 		}
+
+		// Nullable date
+		role.ModifiedAt = modifiedAt.Time
 
 		// Validate role structure and append it, if it passes
 		err = utils.ValidateStruct(role)
@@ -278,6 +374,7 @@ func GetRoleByID(roleID uuid.UUID) (*types.Role, error) {
 	}
 
 	// Get role by ID and copy its data
+	var modifiedAt sql.NullTime
 	role := new(types.Role)
 	err = db.QueryRow(
 		`SELECT *
@@ -289,13 +386,16 @@ func GetRoleByID(roleID uuid.UUID) (*types.Role, error) {
 		&role.Name,
 		&role.Description,
 		&role.CreatedAt,
-		&role.ModifiedAt,
+		&modifiedAt,
 	)
 	if errors.As(err, &sql.ErrNoRows) {
 		return nil, nil // returns no data and no error, if it does not exist
 	} else if err != nil {
 		return nil, err
 	}
+
+	// Nullable date
+	role.ModifiedAt = modifiedAt.Time
 
 	// Validate role structure and return it, if it passes
 	err = utils.ValidateStruct(role)
