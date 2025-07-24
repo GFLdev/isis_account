@@ -27,36 +27,24 @@ func AuthLoginHandler(c echo.Context) error {
 	body := c.Request().Body
 	data, err := utils.JSONToStruct[types.HTTPLoginForm](body, false)
 	if err != nil {
-		c.JSON(
-			http.StatusInternalServerError,
-			types.HTTPMessageResponse{Message: types.ParsingError.Error()},
-		)
+		c.JSON(http.StatusBadRequest, types.InvalidBody.Message())
 		return err
 	}
 
 	// Validate body
 	err = utils.ValidateStruct(body)
 	if err != nil {
-		c.JSON(
-			http.StatusBadRequest,
-			types.HTTPMessageResponse{Message: types.InvalidAuthForm.Error()},
-		)
+		c.JSON(http.StatusBadRequest, types.InvalidAuthForm.Message())
 		return err
 	}
 
 	// Get password hash from database
 	acc, err := queries.GetAccountByUsername(data.Username)
 	if err != nil {
-		c.JSON(
-			http.StatusInternalServerError,
-			types.HTTPMessageResponse{Message: types.InternalError.Error()},
-		)
+		c.JSON(http.StatusInternalServerError, types.InternalError.Message())
 		return err
 	} else if acc == nil || !acc.IsActive {
-		return c.JSON(
-			http.StatusNotFound,
-			types.HTTPMessageResponse{Message: types.AccountNotFound.Error()},
-		)
+		return c.JSON(http.StatusNotFound, types.AccountNotFound.Message())
 	}
 
 	// New login attempt
@@ -73,10 +61,7 @@ func AuthLoginHandler(c echo.Context) error {
 	err = bcrypt.CompareHashAndPassword(acc.Password, []byte(data.Password))
 	if err != nil {
 		newLoginAttempt(loginAttemptConfig)
-		c.JSON(
-			http.StatusBadRequest,
-			types.HTTPMessageResponse{Message: types.IncorrectCredentials.Error()},
-		)
+		c.JSON(http.StatusBadRequest, types.IncorrectCredentials.Message())
 		return err
 	}
 
@@ -93,10 +78,7 @@ func AuthLoginHandler(c echo.Context) error {
 	accessToken, err := GenerateToken(claims)
 	if err != nil {
 		newLoginAttempt(loginAttemptConfig)
-		c.JSON(
-			http.StatusInternalServerError,
-			types.HTTPMessageResponse{Message: types.ParsingError.Error()},
-		)
+		c.JSON(http.StatusInternalServerError, types.ParsingError.Message())
 		return err
 	}
 
@@ -109,10 +91,7 @@ func AuthLoginHandler(c echo.Context) error {
 	)
 	if err != nil {
 		newLoginAttempt(loginAttemptConfig)
-		c.JSON(
-			http.StatusInternalServerError,
-			types.HTTPMessageResponse{Message: types.InternalError.Error()},
-		)
+		c.JSON(http.StatusInternalServerError, types.InternalError.Message())
 		return err
 	}
 
@@ -124,10 +103,7 @@ func AuthLoginHandler(c echo.Context) error {
 	err = utils.ValidateStruct(res)
 	if err != nil {
 		newLoginAttempt(loginAttemptConfig)
-		c.JSON(
-			http.StatusInternalServerError,
-			types.HTTPMessageResponse{Message: types.ParsingError.Error()},
-		)
+		c.JSON(http.StatusInternalServerError, types.ParsingError.Message())
 		return err
 	}
 
@@ -196,10 +172,7 @@ func AuthRefreshHandler(c echo.Context) error {
 		reqToken, err := c.Cookie("refresh_token")
 		if err != nil || reqToken.Expires.Compare(ts) < 1 {
 			newLoginAttempt(loginAttemptConfig)
-			return c.JSON(
-				http.StatusUnauthorized,
-				types.HTTPMessageResponse{Message: types.SessionExpired.Error()},
-			)
+			return c.JSON(http.StatusUnauthorized, types.SessionExpired.Message())
 		}
 
 		// Get account's refresh token
@@ -207,16 +180,10 @@ func AuthRefreshHandler(c echo.Context) error {
 		if errors.As(err, &sql.ErrNoRows) ||
 			refreshToken.ExpirationDate.Compare(ts) < 1 {
 			newLoginAttempt(loginAttemptConfig)
-			return c.JSON(
-				http.StatusUnauthorized,
-				types.HTTPMessageResponse{Message: types.SessionExpired.Error()},
-			)
+			return c.JSON(http.StatusUnauthorized, types.SessionExpired.Message())
 		} else if err != nil {
 			newLoginAttempt(loginAttemptConfig)
-			c.JSON(
-				http.StatusInternalServerError,
-				types.HTTPMessageResponse{Message: types.InternalError.Error()},
-			)
+			c.JSON(http.StatusInternalServerError, types.InternalError.Message())
 			return err
 		}
 
@@ -225,10 +192,7 @@ func AuthRefreshHandler(c echo.Context) error {
 		err = bcrypt.CompareHashAndPassword(hashedToken, []byte(reqToken.Value))
 		if err != nil {
 			newLoginAttempt(loginAttemptConfig)
-			return c.JSON(
-				http.StatusUnauthorized,
-				types.HTTPMessageResponse{Message: types.SessionExpired.Error()},
-			)
+			return c.JSON(http.StatusUnauthorized, types.SessionExpired.Message())
 		}
 	}
 
@@ -245,10 +209,7 @@ func AuthRefreshHandler(c echo.Context) error {
 	accessToken, err := GenerateToken(newClaims)
 	if err != nil {
 		newLoginAttempt(loginAttemptConfig)
-		c.JSON(
-			http.StatusInternalServerError,
-			types.HTTPMessageResponse{Message: types.ParsingError.Error()},
-		)
+		c.JSON(http.StatusInternalServerError, types.ParsingError.Message())
 		return err
 	}
 
@@ -261,10 +222,7 @@ func AuthRefreshHandler(c echo.Context) error {
 	)
 	if err != nil {
 		newLoginAttempt(loginAttemptConfig)
-		c.JSON(
-			http.StatusInternalServerError,
-			types.HTTPMessageResponse{Message: types.InternalError.Error()},
-		)
+		c.JSON(http.StatusInternalServerError, types.InternalError.Message())
 		return err
 	}
 
@@ -276,10 +234,7 @@ func AuthRefreshHandler(c echo.Context) error {
 	err = utils.ValidateStruct(res)
 	if err != nil {
 		newLoginAttempt(loginAttemptConfig)
-		c.JSON(
-			http.StatusInternalServerError,
-			types.HTTPMessageResponse{Message: types.ParsingError.Error()},
-		)
+		c.JSON(http.StatusInternalServerError, types.ParsingError.Message())
 		return err
 	}
 
@@ -323,27 +278,18 @@ func AuthLogoutHandler(c echo.Context) error {
 	// Get token
 	token, err := GetToken(c)
 	if err != nil {
-		return c.JSON(
-			http.StatusOK,
-			types.HTTPMessageResponse{Message: string(types.AlreadyLoggedOut)},
-		)
+		return c.JSON(http.StatusOK, types.AlreadyLoggedOut)
 	}
 
 	// Get claims from token
 	claims, err := GetClaims(c, token)
 	if err != nil {
-		return c.JSON(
-			http.StatusOK,
-			types.HTTPMessageResponse{Message: string(types.AlreadyLoggedOut)},
-		)
+		return c.JSON(http.StatusOK, types.AlreadyLoggedOut)
 	}
 
 	// Check if token is expired
 	if claims.ExpiresAt.Compare(time.Now()) < 1 {
-		return c.JSON(
-			http.StatusOK,
-			types.HTTPMessageResponse{Message: string(types.AlreadyLoggedOut)},
-		)
+		return c.JSON(http.StatusOK, types.AlreadyLoggedOut)
 	}
 
 	// Reset cookies
@@ -369,10 +315,7 @@ func AuthLogoutHandler(c echo.Context) error {
 	})
 
 	// Response
-	return c.JSON(
-		http.StatusOK,
-		types.HTTPMessageResponse{Message: string(types.LoggedOut)},
-	)
+	return c.JSON(http.StatusOK, types.LoggedOut)
 }
 
 // GetAccountsHandler handles all accounts fetching.
@@ -388,7 +331,7 @@ func GetAccountsHandler(c echo.Context) error {
 
 	// Get elevation for account module
 	elevated, err := GetElevation(c, claimsData, types.AccountModule)
-	if err != nil {
+	if err != nil || !elevated {
 		return ElevationErrorHandler(c, elevated, err)
 	}
 
@@ -398,10 +341,7 @@ func GetAccountsHandler(c echo.Context) error {
 	if qLimit != "" {
 		filters.Limit, err = strconv.Atoi(qLimit)
 		if err != nil {
-			c.JSON(
-				http.StatusBadRequest,
-				types.HTTPMessageResponse{Message: types.InvalidParameters.Error()},
-			)
+			c.JSON(http.StatusBadRequest, types.InvalidParameters.Message())
 			return err
 		}
 	} else {
@@ -411,10 +351,7 @@ func GetAccountsHandler(c echo.Context) error {
 	if qOffset != "" {
 		filters.Offset, err = strconv.Atoi(qOffset)
 		if err != nil {
-			c.JSON(
-				http.StatusBadRequest,
-				types.HTTPMessageResponse{Message: types.InvalidParameters.Error()},
-			)
+			c.JSON(http.StatusBadRequest, types.InvalidParameters.Message())
 			return err
 		}
 	} else {
@@ -424,46 +361,34 @@ func GetAccountsHandler(c echo.Context) error {
 	if qRoleID != "" {
 		filters.RoleID, err = uuid.Parse(qRoleID)
 		if err != nil {
-			c.JSON(
-				http.StatusBadRequest,
-				types.HTTPMessageResponse{Message: types.InvalidParameters.Error()},
-			)
+			c.JSON(http.StatusBadRequest, types.InvalidParameters.Message())
 			return err
 		}
 	} else {
 		filters.RoleID = uuid.Nil // default to a null role
 	}
 	qIsActive := c.QueryParam("is_active")
-	if qIsActive == string(types.ActiveAccountFilter) ||
-		qIsActive == string(types.InactiveAccountFilter) {
-		filters.IsActive = types.AccountActivityFilter(qIsActive)
+	if qIsActive == string(types.ActiveAccount) ||
+		qIsActive == string(types.InactiveAccount) {
+		filters.IsActive = types.AccountActivity(qIsActive)
 	} else {
-		filters.IsActive = types.NoActivityAccountFilter // default to no filter
+		filters.IsActive = types.NilActivity // default to no filter
 	}
 
 	// Validate filters
 	err = utils.ValidateStruct(filters)
 	if err != nil {
-		c.JSON(
-			http.StatusBadRequest,
-			types.HTTPMessageResponse{Message: types.InvalidParameters.Error()},
-		)
+		c.JSON(http.StatusBadRequest, types.InvalidParameters.Message())
 		return err
 	}
 
 	// Get all accounts data
 	accs, err := queries.GetAllAcounts(filters)
 	if err != nil {
-		c.JSON(
-			http.StatusInternalServerError,
-			types.HTTPMessageResponse{Message: types.InternalError.Error()},
-		)
+		c.JSON(http.StatusInternalServerError, types.InternalError.Message())
 		return err
 	} else if len(accs) == 0 {
-		return c.JSON(
-			http.StatusNoContent,
-			types.HTTPMessageResponse{Message: types.NoAccountsFound.Error()},
-		)
+		return c.JSON(http.StatusNoContent, types.NoAccountsFound.Message())
 	}
 	return c.JSON(http.StatusOK, accs)
 }
@@ -474,13 +399,10 @@ func GetAccountHandler(c echo.Context) error {
 	c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 
 	// Get URL param and validate it
-	accountIDParam := c.Param("id")
-	accountID, err := uuid.Parse(accountIDParam)
+	accIDParam := c.Param("id")
+	accID, err := uuid.Parse(accIDParam)
 	if err != nil {
-		c.JSON(
-			http.StatusBadRequest,
-			types.HTTPMessageResponse{Message: types.ParsingError.Error()},
-		)
+		c.JSON(http.StatusBadRequest, types.InvalidParameters.Message())
 		return err
 	}
 
@@ -488,56 +410,29 @@ func GetAccountHandler(c echo.Context) error {
 	claimsData, err := GetClaimsData(c)
 	if err != nil {
 		return TokenErrorHandler(c, err)
-	} else if accountID != claimsData.AccountID {
+	} else if accID != claimsData.AccountID {
 		// Get elevation for account module
 		elevated, err := GetElevation(c, claimsData, types.AccountModule)
-		if err != nil {
+		if err != nil || !elevated {
 			return ElevationErrorHandler(c, elevated, err)
 		}
 	}
 
 	// Get account data
-	account, err := queries.GetAccountByID(accountID)
+	acc, err := queries.GetAccountByID(accID)
 	if err != nil {
-		c.JSON(
-			http.StatusInternalServerError,
-			types.HTTPMessageResponse{Message: types.InternalError.Error()},
-		)
+		c.JSON(http.StatusInternalServerError, types.InternalError.Message())
 		return err
-	} else if account == nil {
-		return c.JSON(
-			http.StatusNotFound,
-			types.HTTPMessageResponse{Message: types.AccountNotFound.Error()},
-		)
+	} else if acc == nil {
+		return c.JSON(http.StatusNotFound, types.AccountNotFound.Message())
 	}
-	return c.JSON(http.StatusOK, account)
+	return c.JSON(http.StatusOK, acc)
 }
 
 // CreateAccountHandler handles the creation of an account.
 func CreateAccountHandler(c echo.Context) error {
 	// Headers
 	c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-
-	// Read and parse body
-	body := c.Request().Body
-	data, err := utils.JSONToStruct[types.HTTPNewAccountForm](body, false)
-	if err != nil {
-		c.JSON(
-			http.StatusInternalServerError,
-			types.HTTPMessageResponse{Message: types.ParsingError.Error()},
-		)
-		return err
-	}
-
-	// Validate body
-	err = utils.ValidateStruct(data)
-	if err != nil {
-		c.JSON(
-			http.StatusBadRequest,
-			types.HTTPMessageResponse{Message: types.InvalidNewAccountForm.Error()},
-		)
-		return err
-	}
 
 	// Get claims data
 	claimsData, err := GetClaimsData(c)
@@ -547,48 +442,48 @@ func CreateAccountHandler(c echo.Context) error {
 
 	// Get elevation for account module
 	elevated, err := GetElevation(c, claimsData, types.AccountModule)
-	if err != nil {
+	if err != nil || !elevated {
 		return ElevationErrorHandler(c, elevated, err)
+	}
+
+	// Read and parse body
+	body := c.Request().Body
+	data, err := utils.JSONToStruct[types.HTTPNewAccountForm](body, false)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, types.InvalidBody.Message())
+		return err
+	}
+
+	// Validate body
+	err = utils.ValidateStruct(data)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, types.InvalidNewAccountForm.Message())
+		return err
 	}
 
 	// Check if username and role exists
 	ok, err := queries.CheckAccountByUsername(data.Username)
 	if err != nil {
-		c.JSON(
-			http.StatusInternalServerError,
-			types.HTTPMessageResponse{Message: types.InternalError.Error()},
-		)
+		c.JSON(http.StatusInternalServerError, types.InternalError.Message())
 		return err
 	} else if ok {
-		return c.JSON(
-			http.StatusBadRequest,
-			types.HTTPMessageResponse{Message: types.UsernameTaken.Error()},
-		)
+		return c.JSON(http.StatusBadRequest, types.UsernameTaken.Message())
 	}
 	ok, err = queries.CheckRoleByID(data.RoleID)
 	if err != nil {
-		c.JSON(
-			http.StatusInternalServerError,
-			types.HTTPMessageResponse{Message: types.InternalError.Error()},
-		)
+		c.JSON(http.StatusInternalServerError, types.InternalError.Message())
 		return err
 	} else if !ok {
-		return c.JSON(
-			http.StatusBadRequest,
-			types.HTTPMessageResponse{Message: types.RoleNotFound.Error()},
-		)
+		return c.JSON(http.StatusBadRequest, types.RoleNotFound.Message())
 	}
 
 	// Create new account
-	account, err := queries.CreateAccount(&data)
+	acc, err := queries.CreateAccount(&data)
 	if err != nil {
-		c.JSON(
-			http.StatusInternalServerError,
-			types.HTTPMessageResponse{Message: types.InternalError.Error()},
-		)
+		c.JSON(http.StatusInternalServerError, types.InternalError.Message())
 		return err
 	}
-	return c.JSON(http.StatusCreated, account)
+	return c.JSON(http.StatusCreated, acc)
 }
 
 // UpdateAccountHandler handles one account update.
@@ -597,13 +492,10 @@ func UpdateAccountHandler(c echo.Context) error {
 	c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 
 	// Get URL param and validate it
-	accountIDParam := c.Param("id")
-	accountID, err := uuid.Parse(accountIDParam)
+	accIDParam := c.Param("id")
+	accID, err := uuid.Parse(accIDParam)
 	if err != nil {
-		c.JSON(
-			http.StatusBadRequest,
-			types.HTTPMessageResponse{Message: types.ParsingError.Error()},
-		)
+		c.JSON(http.StatusBadRequest, types.InvalidParameters.Message())
 		return err
 	}
 
@@ -611,18 +503,67 @@ func UpdateAccountHandler(c echo.Context) error {
 	claimsData, err := GetClaimsData(c)
 	if err != nil {
 		return TokenErrorHandler(c, err)
-	} else if accountID != claimsData.AccountID {
+	} else if accID != claimsData.AccountID {
 		// Get elevation for account module
 		elevated, err := GetElevation(c, claimsData, types.AccountModule)
-		if err != nil {
+		if err != nil || !elevated {
 			return ElevationErrorHandler(c, elevated, err)
 		}
 	}
 
-	return c.JSON(
-		http.StatusNotImplemented,
-		types.HTTPMessageResponse{Message: types.NotImplemented.Error()},
-	)
+	// Check if account exists
+	ok, err := queries.CheckAccountByID(accID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, types.InternalError.Message())
+		return err
+	} else if !ok {
+		return c.JSON(http.StatusBadRequest, types.AccountNotFound.Message())
+	}
+
+	// Read and parse body
+	body := c.Request().Body
+	data, err := utils.JSONToStruct[types.HTTPPatchAccountForm](body, false)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, types.InvalidBody.Message())
+		return err
+	}
+
+	// Validate body
+	err = utils.ValidateStruct(data)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, types.InvalidPatchAccountForm.Message())
+		return err
+	}
+
+	// If update username, check if username is taken
+	if data.Username != "" {
+		ok, err = queries.CheckAccountByUsername(data.Username)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, types.InternalError.Message())
+			return err
+		} else if ok {
+			return c.JSON(http.StatusBadRequest, types.UsernameTaken.Message())
+		}
+	}
+
+	// If update role, check if role exists
+	if data.RoleID != uuid.Nil {
+		ok, err = queries.CheckRoleByID(data.RoleID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, types.InternalError.Message())
+			return err
+		} else if ok {
+			return c.JSON(http.StatusBadRequest, types.RoleNotFound.Message())
+		}
+	}
+
+	// Update account
+	err = queries.UpdateAccount(accID, &data)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, types.InternalError.Message())
+		return err
+	}
+	return c.JSON(http.StatusOK, types.AccountUpdated)
 }
 
 // DeleteAccountsHandler handles the deletion of all accounts.
@@ -638,14 +579,11 @@ func DeleteAccountsHandler(c echo.Context) error {
 
 	// Get elevation for account module
 	elevated, err := GetElevation(c, claimsData, types.AccountModule)
-	if err != nil {
+	if err != nil || !elevated {
 		return ElevationErrorHandler(c, elevated, err)
 	}
 
-	return c.JSON(
-		http.StatusNotImplemented,
-		types.HTTPMessageResponse{Message: types.NotImplemented.Error()},
-	)
+	return c.JSON(http.StatusNotImplemented, types.NotImplemented.Message())
 }
 
 // DeleteAccountHandler handles the deletion of one account.
@@ -654,13 +592,10 @@ func DeleteAccountHandler(c echo.Context) error {
 	c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 
 	// Get URL param and validate it
-	accountIDParam := c.Param("id")
-	accountID, err := uuid.Parse(accountIDParam)
+	accIDParam := c.Param("id")
+	accID, err := uuid.Parse(accIDParam)
 	if err != nil {
-		c.JSON(
-			http.StatusBadRequest,
-			types.HTTPMessageResponse{Message: types.ParsingError.Error()},
-		)
+		c.JSON(http.StatusBadRequest, types.InvalidParameters.Message())
 		return err
 	}
 
@@ -668,18 +603,15 @@ func DeleteAccountHandler(c echo.Context) error {
 	claimsData, err := GetClaimsData(c)
 	if err != nil {
 		return TokenErrorHandler(c, err)
-	} else if accountID != claimsData.AccountID {
+	} else if accID != claimsData.AccountID {
 		// Get elevation for account module
 		elevated, err := GetElevation(c, claimsData, types.AccountModule)
-		if err != nil {
+		if err != nil || !elevated {
 			return ElevationErrorHandler(c, elevated, err)
 		}
 	}
 
-	return c.JSON(
-		http.StatusNotImplemented,
-		types.HTTPMessageResponse{Message: types.NotImplemented.Error()},
-	)
+	return c.JSON(http.StatusNotImplemented, types.NotImplemented.Message())
 }
 
 // GetRolesHandler handles all roles fetching.
@@ -695,23 +627,17 @@ func GetRolesHandler(c echo.Context) error {
 
 	// Get elevation for account module
 	elevated, err := GetElevation(c, claimsData, types.AccountModule)
-	if err != nil {
+	if err != nil || !elevated {
 		return ElevationErrorHandler(c, elevated, err)
 	}
 
 	// Get all roles data
 	roles, err := queries.GetAllRoles()
 	if err != nil {
-		c.JSON(
-			http.StatusInternalServerError,
-			types.HTTPMessageResponse{Message: types.InternalError.Error()},
-		)
+		c.JSON(http.StatusInternalServerError, types.InternalError.Message())
 		return err
 	} else if len(roles) == 0 {
-		return c.JSON(
-			http.StatusNoContent,
-			types.HTTPMessageResponse{Message: types.NoRolesFound.Error()},
-		)
+		return c.JSON(http.StatusNoContent, types.NoRolesFound.Message())
 	}
 	return c.JSON(http.StatusOK, roles)
 }
@@ -725,10 +651,7 @@ func GetRoleHandler(c echo.Context) error {
 	roleIDParam := c.Param("id")
 	roleID, err := uuid.Parse(roleIDParam)
 	if err != nil {
-		c.JSON(
-			http.StatusBadRequest,
-			types.HTTPMessageResponse{Message: types.ParsingError.Error()},
-		)
+		c.JSON(http.StatusBadRequest, types.InvalidParameters.Message())
 		return err
 	}
 
@@ -739,7 +662,7 @@ func GetRoleHandler(c echo.Context) error {
 	} else if roleID != claimsData.RoleID {
 		// Get elevation for account module
 		elevated, err := GetElevation(c, claimsData, types.AccountModule)
-		if err != nil {
+		if err != nil || !elevated {
 			return ElevationErrorHandler(c, elevated, err)
 		}
 	}
@@ -747,16 +670,10 @@ func GetRoleHandler(c echo.Context) error {
 	// Get role data
 	role, err := queries.GetRoleByID(roleID)
 	if err != nil {
-		c.JSON(
-			http.StatusInternalServerError,
-			types.HTTPMessageResponse{Message: types.InternalError.Error()},
-		)
+		c.JSON(http.StatusInternalServerError, types.InternalError.Message())
 		return err
 	} else if role == nil {
-		return c.JSON(
-			http.StatusNoContent,
-			types.HTTPMessageResponse{Message: types.RoleNotFound.Error()},
-		)
+		return c.JSON(http.StatusNoContent, types.RoleNotFound.Message())
 	}
 	return c.JSON(http.StatusOK, role)
 }
@@ -774,20 +691,46 @@ func CreateRoleHandler(c echo.Context) error {
 
 	// Get elevation for account module
 	elevated, err := GetElevation(c, claimsData, types.AccountModule)
-	if err != nil {
+	if err != nil || !elevated {
 		return ElevationErrorHandler(c, elevated, err)
 	}
 
-	return c.JSON(
-		http.StatusNotImplemented,
-		types.HTTPMessageResponse{Message: types.NotImplemented.Error()},
-	)
+	// Read and parse body
+	body := c.Request().Body
+	data, err := utils.JSONToStruct[types.HTTPNewRoleForm](body, false)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, types.InvalidBody.Message())
+		return err
+	}
+
+	// Validate body
+	err = utils.ValidateStruct(data)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, types.InvalidNewRoleForm.Message())
+		return err
+	}
+
+	// Create role
+	role, err := queries.CreateRole(&data)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, types.InternalError.Message())
+		return err
+	}
+	return c.JSON(http.StatusCreated, role)
 }
 
 // UpdateRoleHandler handles one role update.
 func UpdateRoleHandler(c echo.Context) error {
 	// Headers
 	c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+
+	// Get URL param and validate it
+	roleIDParam := c.Param("id")
+	roleID, err := uuid.Parse(roleIDParam)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, types.InvalidParameters.Message())
+		return err
+	}
 
 	// Get claims data
 	claimsData, err := GetClaimsData(c)
@@ -797,14 +740,41 @@ func UpdateRoleHandler(c echo.Context) error {
 
 	// Get elevation for account module
 	elevated, err := GetElevation(c, claimsData, types.AccountModule)
-	if err != nil {
+	if err != nil || !elevated {
 		return ElevationErrorHandler(c, elevated, err)
 	}
 
-	return c.JSON(
-		http.StatusNotImplemented,
-		types.HTTPMessageResponse{Message: types.NotImplemented.Error()},
-	)
+	// Check if role exists
+	ok, err := queries.CheckRoleByID(roleID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, types.InternalError.Message())
+		return err
+	} else if !ok {
+		return c.JSON(http.StatusBadRequest, types.RoleNotFound.Message())
+	}
+
+	// Read and parse body
+	body := c.Request().Body
+	data, err := utils.JSONToStruct[types.HTTPPatchRoleForm](body, false)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, types.InvalidBody.Message())
+		return err
+	}
+
+	// Validate body
+	err = utils.ValidateStruct(data)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, types.InvalidPatchRoleForm.Message())
+		return err
+	}
+
+	// Update role
+	err = queries.UpdateRole(roleID, &data)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, types.InternalError.Message())
+		return err
+	}
+	return c.JSON(http.StatusOK, types.RoleUpdated)
 }
 
 // DeleteRolesHandler handles the deletion of all roles.
@@ -820,14 +790,11 @@ func DeleteRolesHandler(c echo.Context) error {
 
 	// Get elevation for account module
 	elevated, err := GetElevation(c, claimsData, types.AccountModule)
-	if err != nil {
+	if err != nil || !elevated {
 		return ElevationErrorHandler(c, elevated, err)
 	}
 
-	return c.JSON(
-		http.StatusNotImplemented,
-		types.HTTPMessageResponse{Message: types.NotImplemented.Error()},
-	)
+	return c.JSON(http.StatusNotImplemented, types.NotImplemented.Message())
 }
 
 // DeleteRoleHandler handles the deletion of one role.
@@ -843,14 +810,11 @@ func DeleteRoleHandler(c echo.Context) error {
 
 	// Get elevation for account module
 	elevated, err := GetElevation(c, claimsData, types.AccountModule)
-	if err != nil {
+	if err != nil || !elevated {
 		return ElevationErrorHandler(c, elevated, err)
 	}
 
-	return c.JSON(
-		http.StatusNotImplemented,
-		types.HTTPMessageResponse{Message: types.NotImplemented.Error()},
-	)
+	return c.JSON(http.StatusNotImplemented, types.NotImplemented.Message())
 }
 
 // GetLogs handles all logs fetching.
@@ -866,14 +830,11 @@ func GetLogs(c echo.Context) error {
 
 	// Get elevation for account module
 	elevated, err := GetElevation(c, claimsData, types.AccountModule)
-	if err != nil {
+	if err != nil || !elevated {
 		return ElevationErrorHandler(c, elevated, err)
 	}
 
-	return c.JSON(
-		http.StatusNotImplemented,
-		types.HTTPMessageResponse{Message: types.NotImplemented.Error()},
-	)
+	return c.JSON(http.StatusNotImplemented, types.NotImplemented.Message())
 }
 
 // GetLoginLogs handles all login attempt logs fetching.
@@ -889,12 +850,9 @@ func GetLoginLogs(c echo.Context) error {
 
 	// Get elevation for account module
 	elevated, err := GetElevation(c, claimsData, types.AccountModule)
-	if err != nil {
+	if err != nil || !elevated {
 		return ElevationErrorHandler(c, elevated, err)
 	}
 
-	return c.JSON(
-		http.StatusNotImplemented,
-		types.HTTPMessageResponse{Message: types.NotImplemented.Error()},
-	)
+	return c.JSON(http.StatusNotImplemented, types.NotImplemented.Message())
 }

@@ -50,7 +50,7 @@ func GetToken(c echo.Context) (*jwt.Token, error) {
 	// Get cookie
 	cookie, err := c.Cookie("access_token")
 	if err != nil {
-		return nil, types.TokenError
+		return nil, types.TokenError.Err()
 	}
 
 	// Parse token
@@ -61,14 +61,14 @@ func GetToken(c echo.Context) (*jwt.Token, error) {
 		func(t *jwt.Token) (interface{}, error) {
 			_, ok := t.Method.(*jwt.SigningMethodHMAC)
 			if !ok {
-				return nil, types.ParseTokenError
+				return nil, types.ParseTokenError.Err()
 			}
 			return []byte(cfg.JWT.Secret), nil
 		},
 		jwt.WithoutClaimsValidation(), // get claims from expired tokens (refresh)
 	)
 	if err != nil {
-		return nil, types.TokenError
+		return nil, types.TokenError.Err()
 	}
 	return token, nil
 }
@@ -77,7 +77,7 @@ func GetClaims(c echo.Context, token *jwt.Token) (*JWTClaims, error) {
 	// Parse token claims
 	claims, ok := token.Claims.(*JWTClaims)
 	if !ok {
-		return nil, types.ClaimsError
+		return nil, types.ClaimsError.Err()
 	}
 
 	// Validate data
@@ -88,7 +88,7 @@ func GetClaims(c echo.Context, token *jwt.Token) (*JWTClaims, error) {
 	if err != nil {
 		return nil, err
 	} else if !ok {
-		return nil, types.InvalidClaimsData
+		return nil, types.InvalidClaimsData.Err()
 	}
 	return claims, nil
 }
@@ -122,20 +122,11 @@ func GenerateToken(claims JWTClaims) (string, error) {
 func AuthErrorHandler(c echo.Context, err error) error {
 	switch {
 	case errors.As(err, &echojwt.ErrJWTMissing):
-		c.JSON(
-			http.StatusUnauthorized,
-			types.HTTPMessageResponse{Message: types.TokenError.Error()},
-		)
+		c.JSON(http.StatusUnauthorized, types.TokenError)
 	case errors.As(err, &echojwt.ErrJWTInvalid):
-		c.JSON(
-			http.StatusUnauthorized,
-			types.HTTPMessageResponse{Message: types.ParseTokenError.Error()},
-		)
+		c.JSON(http.StatusUnauthorized, types.ParseTokenError.Message())
 	default:
-		c.JSON(
-			http.StatusInternalServerError,
-			types.HTTPMessageResponse{Message: types.AuthFailedError.Error()},
-		)
+		c.JSON(http.StatusInternalServerError, types.AuthFailedError.Message())
 	}
 	return err
 }
@@ -144,27 +135,15 @@ func AuthErrorHandler(c echo.Context, err error) error {
 // functions, sending a coherent JSON response for each possible error.
 func TokenErrorHandler(c echo.Context, err error) error {
 	switch {
-	case errors.As(err, &types.TokenError):
-		c.JSON(
-			http.StatusUnauthorized,
-			types.HTTPMessageResponse{Message: types.TokenError.Error()},
-		)
-	case errors.As(err, &types.ClaimsError):
-	case errors.As(err, &types.ParseTokenError):
-		c.JSON(
-			http.StatusInternalServerError,
-			types.HTTPMessageResponse{Message: types.ParsingError.Error()},
-		)
-	case errors.As(err, &types.InvalidClaimsData):
-		c.JSON(
-			http.StatusUnauthorized,
-			types.HTTPMessageResponse{Message: types.InvalidClaimsData.Error()},
-		)
+	case errors.Is(err, types.TokenError.Err()):
+		c.JSON(http.StatusUnauthorized, types.TokenError.Message())
+	case errors.Is(err, types.ClaimsError.Err()):
+	case errors.Is(err, types.ParseTokenError.Err()):
+		c.JSON(http.StatusInternalServerError, types.ParsingError.Message())
+	case errors.Is(err, types.InvalidClaimsData.Err()):
+		c.JSON(http.StatusUnauthorized, types.InvalidClaimsData.Message())
 	default:
-		c.JSON(
-			http.StatusInternalServerError,
-			types.HTTPMessageResponse{Message: types.AuthFailedError.Error()},
-		)
+		c.JSON(http.StatusInternalServerError, types.AuthFailedError.Message())
 	}
 	return err
 }

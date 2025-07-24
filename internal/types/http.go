@@ -1,14 +1,22 @@
 package types
 
-import "github.com/google/uuid"
+import (
+	"github.com/google/uuid"
+)
 
 // SuccessMessages is the enum for HTTP success messages.
-type SuccessMessages string
+type SuccessMessages HTTPMessageResponse
 
 // Success messages.
-const (
-	LoggedOut        SuccessMessages = "User logged out successfully"
-	AlreadyLoggedOut SuccessMessages = "User already logged out"
+var (
+	LoggedOut        = SuccessMessages{Message: "User logged out successfully"}
+	AlreadyLoggedOut = SuccessMessages{Message: "User already logged out"}
+	AccountUpdated   = SuccessMessages{Message: "Account updated successfully"}
+	AccountsDeleted  = SuccessMessages{Message: "Accounts deleted successfully"}
+	AccountDeleted   = SuccessMessages{Message: "Account deleted successfully"}
+	RoleUpdated      = SuccessMessages{Message: "Role updated successfully"}
+	RolesDeleted     = SuccessMessages{Message: "Roles deleted successfully"}
+	RoleDeleted      = SuccessMessages{Message: "Role deleted successfully"}
 )
 
 // HTTPLoginForm represents the login form sent from the user.
@@ -38,17 +46,35 @@ type HTTPNewAccountForm struct {
 // HTTPPatchAccountForm represents the update account form.
 type HTTPPatchAccountForm struct {
 	// RoleID is the account's role ID.
-	RoleID uuid.UUID `json:"role_id" validate:"uuid"`
+	RoleID uuid.UUID `json:"role_id" validate:"omitempty,uuid"`
 	// Username is the account's username.
-	Username string `json:"username" validate:"min=4,max=30"`
+	Username string `json:"username" validate:"omitempty,min=4,max=30"`
 	// Name is the account's user first name.
-	Name string `json:"name" validate:"max=100"`
+	Name string `json:"name" validate:"omitempty,max=100"`
 	// Surname is the account's user surname.
-	Surname string `json:"surname" validate:"max=100"`
+	Surname string `json:"surname" validate:"omitempty,max=100"`
 	// Email is the account's user email.
-	Email string `json:"email" validate:"email,max=100"`
+	Email string `json:"email" validate:"omitempty,email,max=100"`
 	// Password is the account's bcrypt hash.
-	Password string `json:"password" validate:"max=72"`
+	Password string `json:"password" validate:"omitempty,max=72"`
+	// IsActive is the account's active status.
+	IsActive AccountActivity `validate:"omitempty,oneof=A I ''"`
+}
+
+// HTTPNewRoleForm represents the new role form.
+type HTTPNewRoleForm struct {
+	// Name is the role's name.
+	Name string `json:"name" validate:"required,max=50"`
+	// Description is the role's description.
+	Description string `json:"description" validate:"max=1000"`
+}
+
+// HTTPPatchRoleForm represents the update role form.
+type HTTPPatchRoleForm struct {
+	// Name is the role's name.
+	Name string `json:"name" validate:"omitempty,max=50"`
+	// Description is the role's description.
+	Description string `json:"description" validate:"omitempty,max=1000"`
 }
 
 // HTTPMessageResponse represents the JSON message response.

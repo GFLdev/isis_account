@@ -7,16 +7,16 @@ import (
 	"github.com/google/uuid"
 )
 
-// AccountActivityFilter represents the account activity filter enum.
-type AccountActivityFilter string
+// AccountActivity represents the account activity enum.
+type AccountActivity string
 
 const (
-	// ActiveAccountFilter represents active accounts filter value.
-	ActiveAccountFilter AccountActivityFilter = "A"
-	// InactiveAccountFilter represents inactive accounts filter value.
-	InactiveAccountFilter AccountActivityFilter = "I"
-	// NoActivityAccountFilter represents no account activity filter value.
-	NoActivityAccountFilter AccountActivityFilter = "N"
+	// ActiveAccount represents active accounts value.
+	ActiveAccount AccountActivity = "A"
+	// InactiveAccount represents inactive accounts value.
+	InactiveAccount AccountActivity = "I"
+	// NilActivity represents a nil activity value.
+	NilActivity AccountActivity = ""
 )
 
 // ModuleName represents the modules' name enum in database.
@@ -44,7 +44,7 @@ type GetAccountsFilters struct {
 	// RoleID filter by user's role filter.
 	RoleID uuid.UUID `validate:"uuid"`
 	// IsActive filter by user activity.
-	IsActive AccountActivityFilter `validate:"oneof=A I N"`
+	IsActive AccountActivity `validate:"oneof=A I ''"`
 }
 
 // LoginAttemptConfig represents the parameters of a login attempt.
@@ -130,7 +130,7 @@ type Role struct {
 	// Name is the role's name.
 	Name string `json:"name" validate:"required,max=50"`
 	// Description is the role's description.
-	Description string `json:"description" validate:"required,max=1000"`
+	Description string `json:"description" validate:"max=1000"`
 	// CreatedAt is the role's creation timestamp.
 	CreatedAt time.Time `json:"created_at"`
 	// ModifiedAt is the role's last modification timestamp.

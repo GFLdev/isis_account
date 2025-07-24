@@ -62,10 +62,7 @@ func ElevationErrorHandler(
 	if err != nil {
 		return err
 	} else if !elevated {
-		c.JSON(
-			http.StatusUnauthorized,
-			types.HTTPMessageResponse{Message: types.RoleNotElevated.Error()},
-		)
+		c.JSON(http.StatusUnauthorized, types.RoleNotElevated.Message())
 	}
 	return err
 }

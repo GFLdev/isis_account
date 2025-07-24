@@ -24,7 +24,7 @@ func closeRows(rows *sql.Rows) {
 
 // CheckAccountWithRole check if the account, with given role, exists and is
 // active.
-func CheckAccountWithRole(accountID, roleID uuid.UUID) (bool, error) {
+func CheckAccountWithRole(accID, roleID uuid.UUID) (bool, error) {
 	// Get database instance
 	db, err := database.GetInstance()
 	if err != nil {
@@ -41,8 +41,32 @@ func CheckAccountWithRole(accountID, roleID uuid.UUID) (bool, error) {
         AND account.role_id = $2
         AND account.is_active = TRUE
     );`,
-		accountID,
+		accID,
 		roleID,
+	).Scan(&exists)
+	if err != nil {
+		return false, err
+	}
+	return exists, nil
+}
+
+// CheckAccountByID check if an account, with the given ID, exists.
+func CheckAccountByID(accID uuid.UUID) (bool, error) {
+	// Get database instance
+	db, err := database.GetInstance()
+	if err != nil {
+		return false, err
+	}
+
+	// Query one row and copy the data
+	var exists bool
+	err = db.QueryRow(
+		`SELECT EXISTS (
+      SELECT 1
+      FROM account.account
+      WHERE account.account_id = $1
+    );`,
+		accID,
 	).Scan(&exists)
 	if err != nil {
 		return false, err
@@ -114,10 +138,7 @@ func GetAllAcounts(filters types.GetAccountsFilters) ([]*types.Account, error) {
 	}
 
 	// Build query
-	query := `
-    SELECT *
-    FROM account.account
-    WHERE 0 = 0`
+	query := "SELECT *\nFROM account.account\nWHERE 0 = 0"
 	args := []any{}
 	idx := 1
 	if filters.RoleID != uuid.Nil { // Role
@@ -125,24 +146,22 @@ func GetAllAcounts(filters types.GetAccountsFilters) ([]*types.Account, error) {
 		args = append(args, filters.RoleID)
 		idx++
 	}
-	if filters.IsActive != types.NoActivityAccountFilter { // Account activity
+	if filters.IsActive != types.NilActivity { // Account activity
 		query += "\nAND account.is_active = $" + strconv.Itoa(idx)
-		if filters.IsActive == types.ActiveAccountFilter {
-			args = append(args, true)
-		} else {
-			args = append(args, false)
-		}
+		args = append(args, filters.IsActive == types.ActiveAccount)
 		idx++
 	}
-
-	// Limit and offset
-	if filters.Limit > 0 {
+	if filters.Limit > 0 { // Limit
 		query += "\nLIMIT $" + strconv.Itoa(idx)
 		args = append(args, filters.Limit)
 		idx++
 	}
-	query += "\nOFFSET $" + strconv.Itoa(idx) + ";"
-	args = append(args, filters.Offset)
+	if filters.Offset > 0 { // Offset
+		query += "\nOFFSET $" + strconv.Itoa(idx)
+		args = append(args, filters.Offset)
+		idx++
+	}
+	query += ";"
 
 	// Query all rows and copy data
 	var lastLoginAt, modifiedAt sql.NullTime
@@ -190,7 +209,7 @@ func GetAllAcounts(filters types.GetAccountsFilters) ([]*types.Account, error) {
 }
 
 // GetAccountByID gets only one account from database, by ID.
-func GetAccountByID(accountID uuid.UUID) (*types.Account, error) {
+func GetAccountByID(accID uuid.UUID) (*types.Account, error) {
 	// Get database instance
 	db, err := database.GetInstance()
 	if err != nil {
@@ -204,7 +223,7 @@ func GetAccountByID(accountID uuid.UUID) (*types.Account, error) {
 		`SELECT *
     FROM account.account
     WHERE account.account_id = $1;`,
-		accountID,
+		accID,
 	).Scan(
 		&acc.AccountID,
 		&acc.RoleID,
@@ -285,7 +304,7 @@ func GetAccountByUsername(username string) (*types.Account, error) {
 	return acc, nil
 }
 
-func GetRefreshTokenByAccount(accoundID uuid.UUID) (*types.RefreshToken, error) {
+func GetRefreshTokenByAccount(accID uuid.UUID) (*types.RefreshToken, error) {
 	// Get database instance
 	db, err := database.GetInstance()
 	if err != nil {
@@ -298,7 +317,7 @@ func GetRefreshTokenByAccount(accoundID uuid.UUID) (*types.RefreshToken, error) 
 		`SELECT *
     FROM account.refresh_token
     WHERE refresh_token.account_id = $1;`,
-		accoundID,
+		accID,
 	).Scan(
 		&refreshToken.RefreshTokenID,
 		&refreshToken.AccountID,
@@ -592,9 +611,7 @@ func GetRoleModuleByRole(
 }
 
 // GetAllRoleModuleByAccount gets all role module permissions by account ID.
-func GetAllRoleModuleByAccount(
-	accountID uuid.UUID,
-) ([]*types.RoleModule, error) {
+func GetAllRoleModuleByAccount(accID uuid.UUID) ([]*types.RoleModule, error) {
 	// Get database instance
 	db, err := database.GetInstance()
 	if err != nil {
@@ -611,7 +628,7 @@ func GetAllRoleModuleByAccount(
     INNER JOIN account.account
       ON account.account_id = $1
       AND account.role_id = role_module.role_id;`,
-		accountID,
+		accID,
 	)
 	if err != nil {
 		return nil, err
@@ -643,7 +660,7 @@ func GetAllRoleModuleByAccount(
 // GetRoleModuleByAccount gets the role module permission by account ID and
 // module name.
 func GetRoleModuleByAccount(
-	accountID uuid.UUID,
+	accID uuid.UUID,
 	moduleName types.ModuleName,
 ) (*types.RoleModule, error) {
 	// Get database instance
@@ -663,7 +680,7 @@ func GetRoleModuleByAccount(
       ON account.account_id = $1
       AND account.role_id = role_module.role_id
     WHERE role_module.module_name = $2;`,
-		accountID,
+		accID,
 		moduleName,
 	).Scan(
 		&roleModule.RoleID,
