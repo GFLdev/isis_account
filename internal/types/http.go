@@ -61,6 +61,12 @@ type HTTPPatchAccountForm struct {
 	IsActive AccountActivity `validate:"omitempty,oneof=A I ''"`
 }
 
+// HTTPDeleteAccountsForm represents the delete multiple accounts form.
+type HTTPDeleteAccountsForm struct {
+	// AccountsID is the accounts' ID, to be deleted, slice.
+	AccountsID []uuid.UUID `json:"accounts_id" validate="required,unique,min=1,dive,required,uuid"`
+}
+
 // HTTPNewRoleForm represents the new role form.
 type HTTPNewRoleForm struct {
 	// Name is the role's name.
@@ -77,6 +83,12 @@ type HTTPPatchRoleForm struct {
 	Description string `json:"description" validate:"omitempty,max=1000"`
 }
 
+// HTTPDeleteRolesForm represents the delete multiple roles form.
+type HTTPDeleteRolesForm struct {
+	// RolesID is the roles' ID, to be deleted, slice.
+	RolesID []uuid.UUID `json:"roles_id" validate="required,unique,min=1,dive,required,uuid"`
+}
+
 // HTTPMessageResponse represents the JSON message response.
 type HTTPMessageResponse struct {
 	// Message is the message of the response.
@@ -90,4 +102,16 @@ type HTTPLoginResponse struct {
 	AccountID uuid.UUID `json:"account_id" validate:"required,uuid"`
 	// RoleID is the role's ID of the account.
 	RoleID uuid.UUID `json:"role_id" validate:"required,uuid"`
+}
+
+type HTTPNonExistantAccountsResponse struct {
+	NonExistantAccounts []uuid.UUID `json:"non_existant_accounts" validate="required,unique,min=1,dive,required,uuid"`
+}
+
+type HTTPNonExistantRolesResponse struct {
+	NonExistantRoles []uuid.UUID `json:"non_existant_roles" validate="required,unique,min=1,dive,required,uuid"`
+}
+
+type HTTPRolesInUseResponse struct {
+	RolesInUse []uuid.UUID `json:"roles_in_use" validate="required,unique,min=1,dive,required,uuid"`
 }

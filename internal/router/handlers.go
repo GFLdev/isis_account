@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -583,7 +584,40 @@ func DeleteAccountsHandler(c echo.Context) error {
 		return ElevationErrorHandler(c, elevated, err)
 	}
 
-	return c.JSON(http.StatusNotImplemented, types.NotImplemented.Message())
+	// Read and parse body
+	body := c.Request().Body
+	data, err := utils.JSONToStruct[types.HTTPDeleteAccountsForm](body, false)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, types.InvalidBody.Message())
+		return err
+	}
+
+	// Validate body
+	err = utils.ValidateStruct(data)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, types.InvalidDeleteAccountsForm.Message())
+		return err
+	}
+
+	// Check if each account exist
+	nonExistantAccsID, err := queries.CheckNonExistantAccounts(data.AccountsID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, types.InternalError.Message())
+		return err
+	} else if len(nonExistantAccsID) > 0 {
+		nonExistantAccs := types.HTTPNonExistantAccountsResponse{
+			NonExistantAccounts: nonExistantAccsID,
+		}
+		return c.JSON(http.StatusBadRequest, nonExistantAccs)
+	}
+
+	// Delete multiple accounts
+	err = queries.DeleteAccountsByID(data.AccountsID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, types.InternalError.Message())
+		return err
+	}
+	return c.JSON(http.StatusOK, types.AccountsDeleted)
 }
 
 // DeleteAccountHandler handles the deletion of one account.
@@ -611,7 +645,22 @@ func DeleteAccountHandler(c echo.Context) error {
 		}
 	}
 
-	return c.JSON(http.StatusNotImplemented, types.NotImplemented.Message())
+	// Check if account exists
+	ok, err := queries.CheckAccountByID(accID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, types.InternalError.Message())
+		return err
+	} else if !ok {
+		return c.JSON(http.StatusBadRequest, types.AccountNotFound.Message())
+	}
+
+	// Delete account
+	err = queries.DeleteAccountByID(accID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, types.InternalError.Message())
+		return err
+	}
+	return c.JSON(http.StatusOK, types.AccountDeleted)
 }
 
 // GetRolesHandler handles all roles fetching.
@@ -794,13 +843,85 @@ func DeleteRolesHandler(c echo.Context) error {
 		return ElevationErrorHandler(c, elevated, err)
 	}
 
-	return c.JSON(http.StatusNotImplemented, types.NotImplemented.Message())
+	// Read and parse body
+	body := c.Request().Body
+	data, err := utils.JSONToStruct[types.HTTPDeleteRolesForm](body, false)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, types.InvalidBody.Message())
+		return err
+	}
+
+	// Validate body
+	err = utils.ValidateStruct(data)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, types.InvalidDeleteRolesForm.Message())
+		return err
+	}
+
+	// Check if the roles exist
+	nonExistantRolesID, err := queries.CheckNonExistantRoles(data.RolesID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, types.InternalError.Message())
+		return err
+	} else if len(nonExistantRolesID) > 0 {
+		nonExistantRoles := types.HTTPNonExistantRolesResponse{
+			NonExistantRoles: nonExistantRolesID,
+		}
+		return c.JSON(http.StatusBadRequest, nonExistantRoles)
+	}
+
+	// Get all roles in use
+	allRolesInUse, err := queries.GetRolesInUse()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, types.InternalError.Message())
+		return err
+	}
+
+	// Check if at least one role is in use
+	var wg sync.WaitGroup
+	rolesInUseSet := types.Set[uuid.UUID]{}
+	wg.Add(len(data.RolesID))
+	for _, roleID := range data.RolesID {
+		go func(roleID uuid.UUID) {
+			defer wg.Done()
+			for _, roleInUse := range allRolesInUse {
+				if roleID == roleInUse.RoleID {
+					println(roleID.String())
+					rolesInUseSet.Add(roleID)
+					return
+				}
+			}
+		}(roleID)
+	}
+	wg.Wait()
+	if !rolesInUseSet.IsEmpty() {
+		rolesInUse := types.HTTPRolesInUseResponse{
+			RolesInUse: rolesInUseSet.ToSlice(),
+		}
+		return c.JSON(http.StatusConflict, rolesInUse)
+	}
+
+	// Delete multiple roles
+	err = queries.DeleteRolesByID(data.RolesID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, types.InternalError.Message())
+		return err
+	}
+	return c.JSON(http.StatusOK, types.RolesDeleted)
 }
 
 // DeleteRoleHandler handles the deletion of one role.
 func DeleteRoleHandler(c echo.Context) error {
 	// Headers
 	c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+
+	// Get URL param and validate it
+	roleIDParam := c.Param("id")
+	roleID, err := uuid.Parse(roleIDParam)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, types.InvalidParameters.Message())
+		return err
+	}
 
 	// Get claims data
 	claimsData, err := GetClaimsData(c)
@@ -814,7 +935,36 @@ func DeleteRoleHandler(c echo.Context) error {
 		return ElevationErrorHandler(c, elevated, err)
 	}
 
-	return c.JSON(http.StatusNotImplemented, types.NotImplemented.Message())
+	// Check if role exists
+	ok, err := queries.CheckRoleByID(roleID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, types.InternalError.Message())
+		return err
+	} else if !ok {
+		return c.JSON(http.StatusBadRequest, types.RoleNotFound.Message())
+	}
+
+	// Get all roles in use
+	allRolesInUse, err := queries.GetRolesInUse()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, types.InternalError.Message())
+		return err
+	}
+
+	// Check if role is in use
+	for _, roleInUse := range allRolesInUse {
+		if roleID == roleInUse.RoleID {
+			return c.JSON(http.StatusConflict, types.RoleInUse.Message())
+		}
+	}
+
+	// Delete role
+	err = queries.DeleteRoleByID(roleID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, types.InternalError.Message())
+		return err
+	}
+	return c.JSON(http.StatusOK, types.RoleDeleted)
 }
 
 // GetLogs handles all logs fetching.

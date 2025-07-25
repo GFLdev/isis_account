@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 	"go.uber.org/zap"
 )
 
@@ -97,6 +98,80 @@ func CheckAccountByUsername(username string) (bool, error) {
 		return false, err
 	}
 	return exists, nil
+}
+
+// CheckNonExistantAccounts check accounts that does not exist.
+func CheckNonExistantAccounts(accsID []uuid.UUID) ([]uuid.UUID, error) {
+	// Get database instance
+	db, err := database.GetInstance()
+	if err != nil {
+		return nil, err
+	}
+
+	// Query one row and copy the data
+	nonExistantAccsID := []uuid.UUID{}
+	rows, err := db.Query(
+		`SELECT id
+    FROM UNNEST($1::uuid[]) AS id
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM account.account
+      WHERE account.account_id = id
+    );`,
+		pq.Array(accsID),
+	)
+	if err != nil {
+		return nil, nil
+	}
+	defer closeRows(rows)
+	for rows.Next() {
+		var nonExistantAccID uuid.UUID
+		err = rows.Scan(&nonExistantAccID)
+		if errors.As(err, &sql.ErrNoRows) {
+			return nil, nil // returns no data and no error, if it does not exist
+		} else if err != nil {
+			return nil, err
+		}
+		nonExistantAccsID = append(nonExistantAccsID, nonExistantAccID)
+	}
+	return nonExistantAccsID, nil
+}
+
+// CheckNonExistantRoles check roles that does not exist.
+func CheckNonExistantRoles(rolesID []uuid.UUID) ([]uuid.UUID, error) {
+	// Get database instance
+	db, err := database.GetInstance()
+	if err != nil {
+		return nil, err
+	}
+
+	// Query one row and copy the data
+	nonExistantRolesID := []uuid.UUID{}
+	rows, err := db.Query(
+		`SELECT id
+    FROM UNNEST($1::uuid[]) AS id
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM account.role
+      WHERE role.role_id = id
+    );`,
+		pq.Array(rolesID),
+	)
+	defer closeRows(rows)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var nonExistantRoleID uuid.UUID
+		err = rows.Scan(&nonExistantRoleID)
+		if errors.As(err, &sql.ErrNoRows) {
+			return nil, nil // returns no data and no error, if it does not exist
+		} else if err != nil {
+			return nil, err
+		}
+		nonExistantRolesID = append(nonExistantRolesID, nonExistantRoleID)
+	}
+	return nonExistantRolesID, nil
 }
 
 // CheckRoleByID check if a role, with the given ID, exists.
@@ -424,8 +499,59 @@ func GetRoleByID(roleID uuid.UUID) (*types.Role, error) {
 	return role, nil
 }
 
+// GetRolesInUse get all roles currently in use by accounts.
+func GetRolesInUse() ([]*types.Role, error) {
+	// Get database instance
+	db, err := database.GetInstance()
+	if err != nil {
+		return nil, err
+	}
+
+	// Query all roles in use and copy data
+	var modifiedAt sql.NullTime
+	roles := []*types.Role{}
+	rows, err := db.Query(
+		`SELECT *
+    FROM account.role
+    WHERE role.role_id IN (
+      SELECT DISTINCT account.role_id
+      FROM account.account
+    );`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer closeRows(rows)
+	for rows.Next() {
+		role := new(types.Role)
+		err = rows.Scan(
+			&role.RoleID,
+			&role.Name,
+			&role.Description,
+			&role.CreatedAt,
+			&modifiedAt,
+		)
+		if errors.As(err, &sql.ErrNoRows) {
+			return nil, nil // returns no data and no error, if it does not exist
+		} else if err != nil {
+			return nil, err
+		}
+
+		// Nullable date
+		role.ModifiedAt = modifiedAt.Time
+
+		// Validate role structure and append it, if it passes
+		err = utils.ValidateStruct(role)
+		if err != nil {
+			return nil, err
+		}
+		roles = append(roles, role)
+	}
+	return roles, nil
+}
+
 // GetModulesName gets all module_name enum values from database.
-func GetModulesName() ([]string, error) {
+func GetModulesName() ([]types.ModuleName, error) {
 	// Get database instance
 	db, err := database.GetInstance()
 	if err != nil {
@@ -433,14 +559,14 @@ func GetModulesName() ([]string, error) {
 	}
 
 	// Query all module_name enum values in database
-	modulesName := []string{}
+	modulesName := []types.ModuleName{}
 	rows, err := db.Query(
-		`SELECT unnest(enum_range(NULL::account.module_name))::text;`,
+		`SELECT UNNEST(enum_range(NULL::account.module_name));`,
 	)
+	defer closeRows(rows)
 	if err != nil {
 		return nil, err
 	}
-	defer closeRows(rows)
 	for rows.Next() {
 		var moduleName string
 		err = rows.Scan(&moduleName)
@@ -449,7 +575,7 @@ func GetModulesName() ([]string, error) {
 		} else if err != nil {
 			return nil, err
 		}
-		modulesName = append(modulesName, moduleName)
+		modulesName = append(modulesName, types.ModuleName(moduleName))
 	}
 	return modulesName, nil
 }

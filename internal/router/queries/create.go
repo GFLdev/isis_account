@@ -76,6 +76,7 @@ func CreateAccount(form *types.HTTPNewAccountForm) (*types.Account, error) {
 	if err != nil {
 		return nil, err
 	}
+	acc.Password = []byte{}
 	return &acc, nil
 }
 

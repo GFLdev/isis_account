@@ -2,10 +2,76 @@ package types
 
 import (
 	"net"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+// Set represents a set data structrure.
+type Set[T comparable] struct {
+	// val is the set value.
+	val map[T]bool
+	// mux is the mutex for accessing and modifying the set.
+	mux sync.Mutex
+}
+
+// Add adds a new value to set.
+func (set *Set[T]) Add(val T) {
+	set.mux.Lock()
+	defer set.mux.Unlock()
+	set.val[val] = true
+}
+
+// Remove removes a value from set, if it exists.
+func (set *Set[T]) Remove(val T) {
+	set.mux.Lock()
+	defer set.mux.Unlock()
+	delete(set.val, val)
+}
+
+// Clear remove all values from set.
+func (set *Set[T]) Clear() {
+	set.mux.Lock()
+	defer set.mux.Unlock()
+	set.val = make(map[T]bool)
+}
+
+// Contains checks if value is in set.
+func (set *Set[T]) Contains(val T) bool {
+	set.mux.Lock()
+	defer set.mux.Unlock()
+	_, ok := set.val[val]
+	if ok {
+		return true
+	}
+	return false
+}
+
+// ToSlice returns a slice representation of the set.
+func (set *Set[T]) ToSlice() []T {
+	set.mux.Lock()
+	defer set.mux.Unlock()
+	slice := make([]T, 0, len(set.val))
+	for val := range set.val {
+		slice = append(slice, val)
+	}
+	return slice
+}
+
+// Count count the number of values stored in set.
+func (set *Set[T]) Count() int {
+	set.mux.Lock()
+	defer set.mux.Unlock()
+	return len(set.val)
+}
+
+// IsEmpty checks if the set is empty.
+func (set *Set[T]) IsEmpty() bool {
+	set.mux.Lock()
+	defer set.mux.Unlock()
+	return len(set.val) == 0
+}
 
 // AccountActivity represents the account activity enum.
 type AccountActivity string
