@@ -33,19 +33,19 @@ func LogWithHTTPInfo(
 	l(msg, allFields...)
 }
 
-// ReadFile read file using 1MB buffer, and return its content.
+// ReadFile read file using 1KB buffer, and return its content.
 func ReadFile(file *os.File) (*[]byte, error) {
 	data := []byte{}
 	reader := bufio.NewReader(file)
 	buf := make([]byte, 1024) // 1MB
 	for {
-		_, err := reader.Read(buf)
+		n, err := reader.Read(buf)
 		if err == io.EOF {
 			break
 		} else if err != nil {
 			return nil, err
 		}
-		data = append(data, buf...)
+		data = append(data, buf[:n]...)
 	}
 	return &data, nil
 }
