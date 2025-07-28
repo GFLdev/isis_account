@@ -73,6 +73,16 @@ func (set *Set[T]) IsEmpty() bool {
 	return len(set.val) == 0
 }
 
+// Env is the environment enum the application will run.
+type Env string
+
+// Application runtime environment.
+const (
+	PRD Env = "prd"
+	DEV Env = "dev"
+	TST Env = "tst"
+)
+
 // AccountActivity represents the account activity enum.
 type AccountActivity string
 

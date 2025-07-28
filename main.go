@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"isis_account/internal/config"
 	"isis_account/internal/database"
+	"isis_account/internal/logger"
 	"isis_account/internal/router"
 	"isis_account/internal/types"
 	"net"
@@ -22,19 +23,15 @@ const (
 func init() {
 	// Banner
 	fmt.Printf("\n%s%s %s%g%s\n\n",
-		string(types.BoldBlue),
+		types.BoldBlue,
 		App,
-		string(types.BoldWhite),
+		types.BoldWhite,
 		Version,
-		string(types.Reset),
+		types.Reset,
 	)
 
-	// Setup global logger
-	logger := GetLogger()
-	zap.ReplaceGlobals(logger)
-
 	// Create the log's directory
-	err := os.MkdirAll("logs", os.ModeDir)
+	err := os.MkdirAll(logger.LogsDir, os.ModePerm)
 	if err != nil {
 		zap.L().Fatal("Could not create log directory",
 			zap.Error(err),
@@ -45,6 +42,18 @@ func init() {
 func main() {
 	// Initiate config
 	cfg := config.GetConfig()
+
+	// Setup global logger
+	logger := logger.GetLogger(cfg.Env)
+	defer func() { // Flush buffer
+		err := logger.Sync()
+		if err != nil {
+			logger.Warn("Could not flush log entries",
+				zap.Error(err),
+			)
+		}
+	}()
+	zap.ReplaceGlobals(logger)
 
 	// Initiate database
 	db, err := database.GetInstance()

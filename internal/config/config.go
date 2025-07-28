@@ -2,19 +2,10 @@ package config
 
 import (
 	"bytes"
+	"isis_account/internal/types"
 	"isis_account/internal/utils"
 	"os"
 	"sync"
-
-	"go.uber.org/zap"
-)
-
-type Env string
-
-const (
-	PRD Env = "prd"
-	DEV Env = "dev"
-	TST Env = "test"
 )
 
 const (
@@ -23,7 +14,7 @@ const (
 
 type Config struct {
 	// Env is the environment that ISIS Account will be running.
-	Env Env `json:"env" validate:"oneof=prd dev tst"`
+	Env types.Env `json:"env" validate:"oneof=prd dev tst"`
 	// Port is the port that ISIS Account will be running.
 	Port int `json:"port" validate:"min=0,max=65535"`
 	// Origins are the origins for handling CORS.
@@ -61,49 +52,37 @@ func initConfig() {
 	// Read configuration file
 	file, err := os.Open(ConfigFile)
 	if err != nil {
-		zap.L().Fatal("Config file '"+ConfigFile+"' not found",
-			zap.Error(err),
-		)
+		panic("Config file '" + ConfigFile + "' not found: " + err.Error())
 	}
 	payload, err := utils.ReadFile(file)
 	if err != nil {
-		zap.L().Fatal("Could not read config file '"+ConfigFile+"'",
-			zap.Error(err),
-		)
+		panic("Could not read config file '" + ConfigFile + "': " + err.Error())
 	}
 
 	// Parse configuration
 	reader := bytes.NewReader(*payload)
 	cfg, err := utils.JSONToStruct[Config](reader, true)
 	if err != nil {
-		zap.L().Fatal("Could not parse config file '"+ConfigFile+"'",
-			zap.Error(err),
-		)
+		panic("Could not parse config file '" + ConfigFile + "': " + err.Error())
 	}
 
 	// Validate fields
 	err = utils.ValidateStruct(cfg)
 	if err != nil {
-		zap.L().Fatal("Invalid configuration values",
-			zap.Error(err),
-		)
+		panic("Invalid configuration values: " + err.Error())
 	}
 
 	// Default optional values
 	if cfg.Env == "" {
-		zap.L().Info("Defaulting environment to 'tst'")
-		cfg.Env = TST // Default to test environment
+		cfg.Env = types.PRD // Default to prd environment
 	}
 	if len(cfg.Origins) == 0 {
-		zap.L().Info("Defaulting allowed origins to '*'")
 		cfg.Origins = []string{"*"} // Default to all origins
 	}
 	if cfg.JWT.AccessTokenMinutes == 0 {
-		zap.L().Info("Defaulting access token expiration to 30 minutes")
 		cfg.JWT.AccessTokenMinutes = 30 // Default to 30 minutes
 	}
 	if cfg.JWT.RefreshTokenHours == 0 {
-		zap.L().Info("Defaulting refresh token expiration to 24 hours")
 		cfg.JWT.RefreshTokenHours = 24 // Default to 24 hours
 	}
 	instance = &cfg

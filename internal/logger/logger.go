@@ -1,42 +1,47 @@
-package main
+package logger
 
 import (
+	"isis_account/internal/types"
+	"os"
+	"path/filepath"
+	"time"
+
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
-	"os"
-	"path/filepath"
-	"strconv"
-	"time"
 )
 
+// LogsDir is the logs directory.
+const LogsDir = "logs"
+
 // GetLogger gets a new configured multiplexed logger instance.
-// Default config: production
-func GetLogger() *zap.Logger {
-	ts := strconv.FormatInt(time.Now().Unix(), 10) // timestamp
+// Default config: production (prd)
+func GetLogger(env types.Env) *zap.Logger {
+	ts := time.Now().Format("20060102150405") // timestamp "YYYYMMDDHHmmSS"
 
 	// Logging outputs
+	filename := string(env) + "_" + ts + ".json"
 	consoleWriter := zapcore.Lock(os.Stdout)
 	fileWriter := zapcore.AddSync(&lumberjack.Logger{
-		Filename:   filepath.Join("logs", ts+".json"),
+		Filename:   filepath.Join(LogsDir, filename),
 		MaxSize:    20, // megabytes
-		MaxBackups: 3,
-		MaxAge:     7, // days
+		MaxBackups: 3,  // maximum backup numbers
+		MaxAge:     7,  // days
 	})
 
 	// Encoders
 	var consoleConfig, fileConfig zapcore.EncoderConfig
 	var level zapcore.Level
 
-	if os.Getenv("ENV") == "development" {
+	if env == types.DEV {
 		level = zapcore.DebugLevel
 		consoleConfig = zap.NewDevelopmentEncoderConfig()
 		fileConfig = zap.NewDevelopmentEncoderConfig()
-	} else if os.Getenv("ENV") == "test" {
+	} else if env == types.TST {
 		level = zapcore.ErrorLevel
 		consoleConfig = zap.NewDevelopmentEncoderConfig()
 		fileConfig = zap.NewDevelopmentEncoderConfig()
-	} else {
+	} else { // default: PRD
 		level = zapcore.InfoLevel
 		consoleConfig = zap.NewProductionEncoderConfig()
 		fileConfig = zap.NewProductionEncoderConfig()
@@ -59,15 +64,5 @@ func GetLogger() *zap.Logger {
 		zapcore.NewCore(fileEncoder, fileWriter, level),
 	)
 	logger := zap.New(core, zap.AddCaller(), zap.AddCallerSkip(1))
-
-	// Flush buffer and return
-	defer func() {
-		err := logger.Sync()
-		if err != nil {
-			logger.Warn("Could not flush log entries",
-				zap.Error(err),
-			)
-		}
-	}()
 	return logger
 }
