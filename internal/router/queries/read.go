@@ -127,7 +127,7 @@ func CheckNonExistantAccounts(accsID []uuid.UUID) ([]uuid.UUID, error) {
 	for rows.Next() {
 		var nonExistantAccID uuid.UUID
 		err = rows.Scan(&nonExistantAccID)
-		if errors.As(err, &sql.ErrNoRows) {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil // returns no data and no error, if it does not exist
 		} else if err != nil {
 			return nil, err
@@ -164,7 +164,7 @@ func CheckNonExistantRoles(rolesID []uuid.UUID) ([]uuid.UUID, error) {
 	for rows.Next() {
 		var nonExistantRoleID uuid.UUID
 		err = rows.Scan(&nonExistantRoleID)
-		if errors.As(err, &sql.ErrNoRows) {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil // returns no data and no error, if it does not exist
 		} else if err != nil {
 			return nil, err
@@ -262,7 +262,7 @@ func GetAllAcounts(filters types.GetAccountsFilters) ([]*types.Account, error) {
 			&acc.CreatedAt,
 			&modifiedAt,
 		)
-		if errors.As(err, &sql.ErrNoRows) {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil // returns no data and no error, if it does not exist
 		} else if err != nil {
 			return nil, err
@@ -313,7 +313,7 @@ func GetAccountByID(accID uuid.UUID) (*types.Account, error) {
 		&acc.CreatedAt,
 		&modifiedAt,
 	)
-	if errors.As(err, &sql.ErrNoRows) {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil // returns no data and no error, if it does not exist
 	} else if err != nil {
 		return nil, err
@@ -361,7 +361,7 @@ func GetAccountByUsername(username string) (*types.Account, error) {
 		&acc.CreatedAt,
 		&modifiedAt,
 	)
-	if errors.As(err, &sql.ErrNoRows) {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil // returns no data and no error, if it does not exist
 	} else if err != nil {
 		return nil, err
@@ -398,7 +398,7 @@ func GetRefreshTokenByAccount(accID uuid.UUID) (*types.RefreshToken, error) {
 		&refreshToken.AccountID,
 		&refreshToken.ExpirationDate,
 	)
-	if errors.As(err, &sql.ErrNoRows) {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil // returns no data and no error, if it does not exist
 	} else if err != nil {
 		return nil, err
@@ -440,7 +440,7 @@ func GetAllRoles() ([]*types.Role, error) {
 			&role.CreatedAt,
 			&modifiedAt,
 		)
-		if errors.As(err, &sql.ErrNoRows) {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil // returns no data and no error, if it does not exist
 		} else if err != nil {
 			return nil, err
@@ -482,7 +482,7 @@ func GetRoleByID(roleID uuid.UUID) (*types.Role, error) {
 		&role.CreatedAt,
 		&modifiedAt,
 	)
-	if errors.As(err, &sql.ErrNoRows) {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil // returns no data and no error, if it does not exist
 	} else if err != nil {
 		return nil, err
@@ -531,7 +531,7 @@ func GetRolesInUse() ([]*types.Role, error) {
 			&role.CreatedAt,
 			&modifiedAt,
 		)
-		if errors.As(err, &sql.ErrNoRows) {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil // returns no data and no error, if it does not exist
 		} else if err != nil {
 			return nil, err
@@ -570,7 +570,7 @@ func GetModulesName() ([]types.ModuleName, error) {
 	for rows.Next() {
 		var moduleName string
 		err = rows.Scan(&moduleName)
-		if errors.As(err, &sql.ErrNoRows) {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil // returns no data and no error, if it does not exist
 		} else if err != nil {
 			return nil, err
@@ -604,7 +604,7 @@ func GetAllModules() ([]*types.Module, error) {
 			&module.ModuleName,
 			&module.Description,
 		)
-		if errors.As(err, &sql.ErrNoRows) {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil // returns no data and no error, if it does not exist
 		} else if err != nil {
 			return nil, err
@@ -639,7 +639,7 @@ func GetModuleByName(name types.ModuleName) (*types.Module, error) {
 		&module.ModuleName,
 		&module.Description,
 	)
-	if errors.As(err, &sql.ErrNoRows) {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil // returns no data and no error, if it does not exist
 	} else if err != nil {
 		return nil, err
@@ -680,7 +680,7 @@ func GetAllRoleModuleByRole(roleID uuid.UUID) ([]*types.RoleModule, error) {
 			&roleModule.ModuleName,
 			&roleModule.Elevated,
 		)
-		if errors.As(err, &sql.ErrNoRows) {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil // returns no data and no error, if it does not exist
 		} else if err != nil {
 			return nil, err
@@ -722,7 +722,7 @@ func GetRoleModuleByRole(
 		&roleModule.ModuleName,
 		&roleModule.Elevated,
 	)
-	if errors.As(err, &sql.ErrNoRows) {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil // returns no data and no error, if it does not exist
 	} else if err != nil {
 		return nil, err
@@ -767,7 +767,7 @@ func GetAllRoleModuleByAccount(accID uuid.UUID) ([]*types.RoleModule, error) {
 			&roleModule.ModuleName,
 			&roleModule.Elevated,
 		)
-		if errors.As(err, &sql.ErrNoRows) {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil // returns no data and no error, if it does not exist
 		} else if err != nil {
 			return nil, err
@@ -813,7 +813,7 @@ func GetRoleModuleByAccount(
 		&roleModule.ModuleName,
 		&roleModule.Elevated,
 	)
-	if errors.As(err, &sql.ErrNoRows) {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil // returns no data and no error, if it does not exist
 	} else if err != nil {
 		return nil, err

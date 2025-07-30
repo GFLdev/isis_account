@@ -21,15 +21,6 @@ const (
 )
 
 func init() {
-	// Banner
-	fmt.Printf("\n%s%s %s%g%s\n\n",
-		types.BoldBlue,
-		App,
-		types.BoldWhite,
-		Version,
-		types.Reset,
-	)
-
 	// Create the log's directory
 	err := os.MkdirAll(logger.LogsDir, os.ModePerm)
 	if err != nil {
@@ -40,20 +31,29 @@ func init() {
 }
 
 func main() {
+	// Banner
+	fmt.Printf("\n%s%s %s%g%s\n\n",
+		types.BoldBlue,
+		App,
+		types.BoldWhite,
+		Version,
+		types.Reset,
+	)
+
 	// Initiate config
 	cfg := config.GetConfig()
 
 	// Setup global logger
-	logger := logger.GetLogger(cfg.Env)
+	lgr := logger.GetLogger(cfg.Env)
 	defer func() { // Flush buffer
-		err := logger.Sync()
+		err := lgr.Sync()
 		if err != nil {
-			logger.Warn("Could not flush log entries",
+			lgr.Warn("Could not flush log entries",
 				zap.Error(err),
 			)
 		}
 	}()
-	zap.ReplaceGlobals(logger)
+	zap.ReplaceGlobals(lgr)
 
 	// Initiate database
 	db, err := database.GetInstance()

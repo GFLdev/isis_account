@@ -2,7 +2,7 @@ package types
 
 import "errors"
 
-// HTTPError is the enum for custom HTTP errors.
+// HTTPError is the struct for custom HTTP errors.
 type HTTPError struct {
 	message string
 }

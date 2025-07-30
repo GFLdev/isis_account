@@ -38,7 +38,7 @@ func GetLogger(env types.Env) *zap.Logger {
 		consoleConfig = zap.NewDevelopmentEncoderConfig()
 		fileConfig = zap.NewDevelopmentEncoderConfig()
 	} else if env == types.TST {
-		level = zapcore.ErrorLevel
+		level = zapcore.WarnLevel
 		consoleConfig = zap.NewDevelopmentEncoderConfig()
 		fileConfig = zap.NewDevelopmentEncoderConfig()
 	} else { // default: PRD

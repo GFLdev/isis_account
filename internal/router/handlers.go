@@ -178,7 +178,7 @@ func AuthRefreshHandler(c echo.Context) error {
 
 		// Get account's refresh token
 		refreshToken, err := queries.GetRefreshTokenByAccount(claims.AccountID)
-		if errors.As(err, &sql.ErrNoRows) ||
+		if errors.Is(err, sql.ErrNoRows) ||
 			refreshToken.ExpirationDate.Compare(ts) < 1 {
 			newLoginAttempt(loginAttemptConfig)
 			return c.JSON(http.StatusUnauthorized, types.SessionExpired.Message())

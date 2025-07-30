@@ -115,7 +115,7 @@ const (
 type GetAccountsFilters struct {
 	// Limit is the result slice length limit.
 	Limit int `validate:"min=0"`
-	// Offset is the result offset. Offset < Limit (custom validation).
+	// Offset is the result offset.
 	Offset int `validate:"min=0"`
 	// RoleID filter by user's role filter.
 	RoleID uuid.UUID `validate:"uuid"`

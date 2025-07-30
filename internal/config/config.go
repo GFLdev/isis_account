@@ -48,28 +48,28 @@ var (
 	once     sync.Once
 )
 
-func initConfig() {
+func ReadConfig() (*Config, error) {
 	// Read configuration file
 	file, err := os.Open(ConfigFile)
 	if err != nil {
-		panic("Config file '" + ConfigFile + "' not found: " + err.Error())
+		return nil, err
 	}
 	payload, err := utils.ReadFile(file)
 	if err != nil {
-		panic("Could not read config file '" + ConfigFile + "': " + err.Error())
+		return nil, err
 	}
 
 	// Parse configuration
 	reader := bytes.NewReader(*payload)
 	cfg, err := utils.JSONToStruct[Config](reader, true)
 	if err != nil {
-		panic("Could not parse config file '" + ConfigFile + "': " + err.Error())
+		return nil, err
 	}
 
 	// Validate fields
 	err = utils.ValidateStruct(cfg)
 	if err != nil {
-		panic("Invalid configuration values: " + err.Error())
+		return nil, err
 	}
 
 	// Default optional values
@@ -85,10 +85,16 @@ func initConfig() {
 	if cfg.JWT.RefreshTokenHours == 0 {
 		cfg.JWT.RefreshTokenHours = 24 // Default to 24 hours
 	}
-	instance = &cfg
+	return &cfg, nil
 }
 
 func GetConfig() *Config {
-	once.Do(initConfig)
+	once.Do(func() {
+		cfg, err := ReadConfig()
+		if err != nil {
+			panic(err.Error())
+		}
+		instance = cfg
+	})
 	return instance
 }

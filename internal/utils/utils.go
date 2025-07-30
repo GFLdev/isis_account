@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"io"
-	"isis_account/internal/types"
 	"os"
 
 	"github.com/go-playground/validator/v10"
@@ -67,10 +66,6 @@ func ValidateStruct(val any) error {
 	// New validator and implement custom validations
 	validate := validator.New()
 	validate.RegisterValidation("ip_with_localhost", ValidateIPWithLocalHost)
-	validate.RegisterStructValidation(
-		OffsetLessThanLimit,
-		types.GetAccountsFilters{},
-	)
 
 	// Validate
 	return validate.Struct(val)
