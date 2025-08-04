@@ -10,7 +10,6 @@ import (
 	"net"
 	"os"
 	"strconv"
-	"time"
 
 	"go.uber.org/zap"
 )
@@ -56,14 +55,15 @@ func main() {
 	zap.ReplaceGlobals(lgr)
 
 	// Initiate database
+	zap.L().Info("Connecting to database")
 	db, err := database.GetInstance()
 	for i := 1; err != nil; i++ {
-		zap.L().Warn("Could not ping database ["+strconv.Itoa(i)+"]",
+		zap.L().Warn("Could not connect to database ["+strconv.Itoa(i)+"]",
 			zap.Error(err),
 		)
-		time.Sleep(3 * time.Second) // try again after 3 seconds
 		db, err = database.GetInstance()
 	}
+	zap.L().Info("Database connected successfully")
 	defer func() {
 		err := db.Close()
 		if err != nil {

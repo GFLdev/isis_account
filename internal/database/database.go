@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	_ "github.com/lib/pq"
-	"go.uber.org/zap"
 )
 
 var (
@@ -31,12 +30,9 @@ func GetInstance() (*sql.DB, error) {
 		db, err := sql.Open("postgres", connString)
 		if err != nil {
 			// If it cannot open the database connection, crash the program
-			zap.L().Fatal("Could not connect to database",
-				zap.Error(err),
-			)
+			panic("Could not connect to database: " + err.Error())
 		}
 		instance = db
-		zap.L().Info("Database connected successfully")
 	})
 
 	// Check connection

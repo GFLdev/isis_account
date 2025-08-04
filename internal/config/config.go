@@ -92,7 +92,7 @@ func GetConfig() *Config {
 	once.Do(func() {
 		cfg, err := ReadConfig()
 		if err != nil {
-			panic(err.Error())
+			panic("Could not read config file: " + err.Error())
 		}
 		instance = cfg
 	})
